@@ -1,3 +1,5 @@
+using System.Reactive.Disposables.Fluent;
+
 namespace ServiceLib.ViewModels;
 
 public class ProfilesViewModel : MyReactiveObject
@@ -79,6 +81,47 @@ public class ProfilesViewModel : MyReactiveObject
     public ReactiveCommand<Unit, Unit> EditSubCmd { get; }
     public ReactiveCommand<Unit, Unit> DeleteSubCmd { get; }
 
+    private HashSet<String> setIndexIdOfSpeedValueBiggerThanOne = [];
+
+    private HashSet<String> setIndexIdOfSpeedValueBiggerThanZero = [];
+
+    // Disposables
+    private readonly CompositeDisposable _disposables = [];
+
+    // 到下一个双数整点剩余时间
+    private string _timeToNextEvenHour;
+    public string TimeToNextEvenHour
+    {
+        get => _timeToNextEvenHour;
+        set => this.RaiseAndSetIfChanged(ref _timeToNextEvenHour, value);
+    }
+
+    // 函数执行耗时
+    private string _lastCallDuration;
+    public string LastCallDuration
+    {
+        get => _lastCallDuration;
+        set => this.RaiseAndSetIfChanged(ref _lastCallDuration, value);
+    }
+
+    // 自动测速状态
+    private string _autoSpeedTestStatus;
+    public string AutoSpeedTestStatus
+    {
+        get => _autoSpeedTestStatus;
+        set => this.RaiseAndSetIfChanged(ref _autoSpeedTestStatus, value);
+    }
+
+    // 是否有测速在运行中
+    private bool isSpeedTestRunning = false;
+
+    // 自动测速启用状态
+    private bool _isAutoSpeedTestEnabled;
+    public bool IsAutoSpeedTestEnabled
+    {
+        get => _isAutoSpeedTestEnabled;
+        set => this.RaiseAndSetIfChanged(ref _isAutoSpeedTestEnabled, value);
+    }
     #endregion Menu
 
     #region Init
@@ -278,9 +321,370 @@ public class ProfilesViewModel : MyReactiveObject
 
         await RefreshSubscriptions();
         //await RefreshServers();
+
+        StartTimer();
     }
 
     #endregion Init
+
+    // ---------------------------------------------------------
+    // 1) 启动定时器（每秒触发）
+    // ---------------------------------------------------------
+    private void StartTimer()
+    {
+        // 每秒触发一次
+        Observable.Interval(TimeSpan.FromSeconds(1))
+            .ObserveOn(RxApp.MainThreadScheduler)
+            .Subscribe(_ =>
+            {
+                TimeToNextEvenHour = GetTimeToNextEvenHour();
+            })
+            .DisposeWith(_disposables);
+
+        // 每秒检测是否到双数整点（不是整点不会触发）
+        Observable.Interval(TimeSpan.FromSeconds(1))
+            .Subscribe(async _ => await CheckEvenHourTrigger())
+            .DisposeWith(_disposables);
+    }
+
+
+    // ---------------------------------------------------------
+    // 2) 计算“距离下一个双数整点”的时间
+    // ---------------------------------------------------------
+    private string GetTimeToNextEvenHour()
+    {
+        var now = DateTime.Now;
+
+        int nextEvenHour = (now.Hour % 2 == 0) ? now.Hour + 2 : now.Hour + 1;
+        if (nextEvenHour >= 24) nextEvenHour -= 24;
+
+        var nextTime = new DateTime(now.Year, now.Month, now.Day, nextEvenHour, 0, 0);
+        if (nextTime <= now)
+        {
+            nextTime = nextTime.AddHours(24);
+        }
+
+        var remaining = nextTime - now;
+
+        return $"{remaining.Hours:D2}:{remaining.Minutes:D2}:{remaining.Seconds:D2}";
+    }
+
+
+    // ---------------------------------------------------------
+    // 3) 检测是否到双数整点
+    // ---------------------------------------------------------
+    private DateTime _lastTriggered = DateTime.MinValue;
+    private bool _isInAutoSpeedTestRound = false;
+    private async Task CheckEvenHourTrigger()
+    {
+        if (IsAutoSpeedTestEnabled == false)
+        {
+            //Logging.SaveLog("AutoSpeedTest is not enabled. Speed test will not run.");
+
+            await SetAutoSpeedTestStatus($"AutoSpeedTest is not enabled. Speed test will not run.");
+
+            return;
+        }
+
+        var now = DateTime.Now;
+        if (now.Minute == 0 && now.Hour % 2 == 0)
+        {
+            // 防止同一时间重复触发
+            if (_lastTriggered.Hour == now.Hour && _lastTriggered.Date == now.Date)
+            {
+                return;
+            }
+            
+            _lastTriggered = now;
+
+            Logging.SaveLog("AutoSpeedTest is enabled. Speed test begin to run...");
+
+            _isInAutoSpeedTestRound = true;
+
+            var sw = Stopwatch.StartNew();
+
+            await AutoSpeedTest();
+
+            sw.Stop();
+
+            LastCallDuration = $"{sw.Elapsed}";
+            LastCallDuration = LastCallDuration.Substring(0,8);
+
+            _isInAutoSpeedTestRound = false;
+
+            Logging.SaveLog("AutoSpeedTest is enabled. Speed test running done.");
+        } 
+        else
+        {
+            if (_isInAutoSpeedTestRound == false)
+            {
+                if (LastCallDuration.IsNullOrEmpty())
+                {
+                    LastCallDuration = "Have not run yet";
+                }
+
+                await SetAutoSpeedTestStatus($"Last running duration : {LastCallDuration} , next running will begin in : {TimeToNextEvenHour}");
+            }
+        }
+    }
+
+
+    // ---------------------------------------------------------
+    // 4) 自动测速主流程
+    // ---------------------------------------------------------
+    private async Task<Unit> AutoSpeedTest()
+    {
+        try
+        {
+            // 1. 执行一键多线程测试
+            await SetAutoSpeedTestStatus("Step 1 of 8 : Running speed test.");
+            await DoSpeedTest();
+
+            // 2. 按速度排序
+            await SetAutoSpeedTestStatus("Step 2 of 8 : Sorting speed test result.");
+            await DoSortServer();
+
+            // 3. 选择最快服务器（特殊逻辑）
+            await SetAutoSpeedTestStatus("Step 3 of 8 : Setting active server.");
+            await DoSetServer();
+
+
+            // 4. 更新全部订阅（通过代理）
+            await SetAutoSpeedTestStatus("Step 4 of 8 : Updating all subscriptions.");
+            Logging.SaveLog("UpdateSubscriptionProcess begin...");
+            await UpdateSubscriptionProcess("", true);
+            Logging.SaveLog("Wait 10 seconds...");
+            Thread.Sleep(1000 * 10);
+            Logging.SaveLog("UpdateSubscriptionProcess end.");
+
+
+            // 5. 移除重复
+            await SetAutoSpeedTestStatus("Step 5 of 8 : Removing duplicated server.");
+            Logging.SaveLog("RemoveDuplicateServerDoNow begin...");
+            await RemoveDuplicateServerDoNow();
+            Logging.SaveLog("Wait 10 seconds...");
+            Thread.Sleep(1000 * 10);
+            Logging.SaveLog("RemoveDuplicateServerDoNow end.");
+
+
+            // 6. 再次执行一键多线程测试
+            await SetAutoSpeedTestStatus("Step 6 of 8 : Running speed test again.");
+            // 1. 执行一键多线程测试
+            await DoSpeedTest();
+
+            // 7. 再次按速度排序
+            await SetAutoSpeedTestStatus("Step 7 of 8 : Sorting speed test result again.");
+            // 2. 按速度排序
+            await DoSortServer();
+
+            // 8. 再次选择最快服务器（特殊逻辑）
+            await SetAutoSpeedTestStatus("Step 8 of 8 : Setting active server again.");
+            // 3. 选择最快服务器（特殊逻辑）
+            await DoSetServer();
+        }
+        catch (Exception ex)
+        {
+            Logging.SaveLog($"{ex.Message}");
+        }
+
+        await SetAutoSpeedTestStatus("AutoSpeedTest running done, waiting for next round to run.");
+
+        await Task.CompletedTask;
+
+        return Unit.Default;
+    }
+
+    private async Task DoSpeedTest()
+    {
+        Logging.SaveLog("Reset setIndexIdOfSpeedValueBiggerThanOne and setIndexIdOfSpeedValueBiggerThanZero to empty before speed test run.");
+        setIndexIdOfSpeedValueBiggerThanOne.Clear();
+        setIndexIdOfSpeedValueBiggerThanZero.Clear();
+
+        Logging.SaveLog("Stop the might running speed test first.");
+        isSpeedTestRunning = false;
+        ServerSpeedtestStop();
+        Logging.SaveLog("Wait 10 seconds...");
+        Thread.Sleep(1000 * 10);
+
+        Logging.SaveLog("ServerSpeedtest begin...");
+        isSpeedTestRunning = true;
+        await ServerSpeedtest(ESpeedActionType.Mixedtest);
+        while (isSpeedTestRunning)
+        {
+            int oldSetIndexIdOfSpeedValueBiggerThanOneCount = setIndexIdOfSpeedValueBiggerThanOne.Count;
+            int oldSetIndexIdOfSpeedValueBiggerThanZeroCount = setIndexIdOfSpeedValueBiggerThanZero.Count;
+            Logging.SaveLog("Speed test is running, waiting for 2 minutes.");
+            Thread.Sleep(1000 * 120);
+            if (setIndexIdOfSpeedValueBiggerThanOne.Count == oldSetIndexIdOfSpeedValueBiggerThanOneCount && setIndexIdOfSpeedValueBiggerThanZero.Count == oldSetIndexIdOfSpeedValueBiggerThanZeroCount)
+            {
+                Logging.SaveLog("No test is running during the 2 minutes.");
+                Logging.SaveLog("Stop the current round of test now.");
+                isSpeedTestRunning = false;
+                ServerSpeedtestStop();
+                Logging.SaveLog("Wait 10 seconds...");
+                Thread.Sleep(1000 * 10);
+            }
+        }
+        Logging.SaveLog("ServerSpeedtest end.");
+    }
+
+    private async Task DoSortServer()
+    {
+        Logging.SaveLog("SortServer begin...");
+        await SortServer(EServerColName.SpeedVal.ToString());
+        Logging.SaveLog("Wait 10 seconds...");
+        Thread.Sleep(1000 * 10);
+        if (ProfileItems.Count > 1)
+        {
+            ProfileItemModel firstItem = ProfileItems[0];
+            double firstSpeedValue = 0.0;
+            double nextSpeedValue = 0.0;
+
+            double.TryParse(firstItem.SpeedVal, out firstSpeedValue);
+
+            int index = 1;
+            do
+            {
+                ProfileItemModel nextItem = ProfileItems[index];
+                double.TryParse(nextItem.SpeedVal, out nextSpeedValue);
+                index++;
+            } while (index < ProfileItems.Count && firstSpeedValue.Equals(nextSpeedValue));
+
+            if (firstSpeedValue < nextSpeedValue)
+            {
+                await SortServer(EServerColName.SpeedVal.ToString());
+                Logging.SaveLog("Wait 10 seconds...");
+                Thread.Sleep(1000 * 10);
+            }
+        }
+        Logging.SaveLog("SortServer end.");
+    }
+
+    private async Task DoSetServer()
+    {
+        Logging.SaveLog("SetOptimalServer begin...");
+        await SetOptimalServer();
+        Logging.SaveLog("Wait 10 seconds...");
+        Thread.Sleep(1000 * 10);
+        Logging.SaveLog("SetOptimalServer end.");
+    }
+
+    private async Task SetOptimalServer()
+    {
+        if (ProfileItems.Count > 0)
+        {
+            // Determine the optimal profile on the background thread first
+            ProfileItemModel selected = ProfileItems[0];
+
+            int maxCount = 20;
+            if (ProfileItems.Count < maxCount)
+            { 
+               maxCount = ProfileItems.Count;
+            }
+
+            for (int i = 0; i < maxCount; i++)
+            {
+                ProfileItemModel profileItemModel = ProfileItems[i];
+                double delayValue = 0.0;
+                if (double.TryParse(profileItemModel.DelayVal, out delayValue) && delayValue < 500.0 )
+                {
+                    selected = profileItemModel;
+                    break;
+                }
+            }
+
+            for (int i = 0; i < maxCount; i++)
+            {
+                ProfileItemModel profileItemModel = ProfileItems[i];
+                double delayValue = 0.0;
+                double speedValue = 0.0;
+                if (double.TryParse(profileItemModel.DelayVal, out delayValue) && delayValue < 500.0 && double.TryParse(profileItemModel.SpeedVal, out speedValue) && speedValue > 1.0 && profileItemModel.Remarks.IsNullOrEmpty() == false && (profileItemModel.Remarks.ToLower().Contains("us") || profileItemModel.Remarks.Contains("美国")))
+                {
+                    selected = profileItemModel;
+                    break;
+                }
+            }
+
+            // Assign SelectedProfile on the main/UI thread to avoid cross-thread access exceptions
+            RxApp.MainThreadScheduler.Schedule(selected, (scheduler, model) =>
+            {
+                SelectedProfile = model;
+                return Disposable.Empty;
+            });
+
+            // Use the selected item's IndexId when setting default server to avoid reading SelectedProfile from a background thread
+            await SetDefaultServer(selected.IndexId);
+        }
+    }
+
+    // ---------------------------------------------------------
+    // 5) 释放资源
+    // ---------------------------------------------------------
+    public void Dispose()
+    {
+        _disposables.Dispose();
+    }
+
+    private async Task UpdateSubscriptionProcess(string subId, bool blProxy)
+    {
+        await Task.Run(async () => await SubscriptionHandler.UpdateProcess(_config, subId, blProxy, UpdateTaskHandler));
+    }
+    private async Task UpdateTaskHandler(bool success, string msg)
+    {
+        NoticeManager.Instance.SendMessageEx(msg);
+        if (success)
+        {
+            var indexIdOld = _config.IndexId;
+            await RefreshServers();
+            if (indexIdOld != _config.IndexId)
+            {
+                Reload();
+            }
+            if (_config.UiItem.EnableAutoAdjustMainLvColWidth)
+            {
+                AppEvents.AdjustMainLvColWidthRequested.Publish();
+            }
+        }
+    }
+
+    private async Task RemoveDuplicateServerDoNow()
+    {
+        var tuple = await ConfigHandler.DedupServerList(_config, _config.SubIndexId);
+        if (tuple.Item1 > 0 || tuple.Item2 > 0)
+        {
+            await RefreshServers();
+            Reload();
+        }
+        NoticeManager.Instance.Enqueue(string.Format(ResUI.RemoveDuplicateServerResult, tuple.Item1, tuple.Item2));
+    }
+
+    public async Task SetAutoSpeedTestStatus(String status)
+    {
+        //Logging.SaveLog($"Set AutoSpeedTest status: {status}");
+
+        if (status.IsNullOrEmpty())
+        {
+            return;
+        }
+
+        // Ensure we update the UI-bound property on the main/UI thread
+        RxApp.MainThreadScheduler.Schedule(status, (scheduler, s) =>
+        {
+            try
+            {
+                AutoSpeedTestStatus = s;
+                //Logging.SaveLog($"Auto Speed Test Status set to : {s}");
+            }
+            catch (Exception ex)
+            {
+                Logging.SaveLog("Failed to set AutoSpeedTestStatus on UI thread", ex);
+            }
+            return Disposable.Empty;
+        });
+
+        await Task.CompletedTask;
+
+    }
 
     #region Actions
 
@@ -311,6 +715,48 @@ public class ProfilesViewModel : MyReactiveObject
         if (result.Speed.IsNotEmpty())
         {
             item.SpeedVal = result.Speed ?? string.Empty;
+
+            //Logging.SaveLog("Current ProfileItems count: " + ProfileItems.Count);
+            //Logging.SaveLog("Current test result item IndexId: " + item.IndexId);
+            //Logging.SaveLog("Current test result item DelayVal: " + item.DelayVal);
+            //Logging.SaveLog("Current test result item SpeedVal: " + item.SpeedVal);
+
+            double speedValue = 0.0;
+            if (double.TryParse(item.SpeedVal, out speedValue) && speedValue > 1.0)
+            {
+                int beforeCount = setIndexIdOfSpeedValueBiggerThanOne.Count;
+                
+                setIndexIdOfSpeedValueBiggerThanOne.Add(item.IndexId);
+                
+                int afterCount = setIndexIdOfSpeedValueBiggerThanOne.Count;
+
+                if (beforeCount < afterCount)
+                {
+                    Logging.SaveLog("Current speed value bigger than one items count: " + setIndexIdOfSpeedValueBiggerThanOne.Count);
+                }
+            }
+            if (double.TryParse(item.SpeedVal, out speedValue) && speedValue > 0.0)
+            {
+                int beforeCount = setIndexIdOfSpeedValueBiggerThanZero.Count;
+
+                setIndexIdOfSpeedValueBiggerThanZero.Add(item.IndexId);
+                
+                int afterCount = setIndexIdOfSpeedValueBiggerThanZero.Count;
+
+                if (beforeCount < afterCount)
+                {
+                    Logging.SaveLog("Current speed value bigger than zero items count: " + setIndexIdOfSpeedValueBiggerThanZero.Count);
+                }
+            }
+
+            if (setIndexIdOfSpeedValueBiggerThanOne.Count >= 20 || setIndexIdOfSpeedValueBiggerThanZero.Count >= 50)
+            {
+                Logging.SaveLog("setIndexIdOfSpeedValueBiggerThanOne.Count is bigger than 20 or setIndexIdOfSpeedValueBiggerThanZero.Count is bigger than 50. Stop the current round of speed test now.");
+
+                isSpeedTestRunning = false;
+                ServerSpeedtestStop();
+            }
+
         }
         await Task.CompletedTask;
     }

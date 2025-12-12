@@ -96,6 +96,31 @@
                     ToolTip="{x:Static resx:ResUI.menuMixedTestServer}">
                     <materialDesign:PackIcon VerticalAlignment="Center" Kind="Speedometer" />
                 </Button>
+                <TextBlock
+                    Text="Auto"
+                    VerticalAlignment="Center"
+                    Margin="{StaticResource MarginLeftRight4}"
+                    Style="{StaticResource ToolbarTextBlock}">
+                </TextBlock>
+                <ToggleButton
+                    x:Name="togAutoSpeedTest"
+                    Width="30"
+                    Height="30"
+                    Margin="{StaticResource MarginLeftRight4}"
+                    Style="{StaticResource MaterialDesignSwitchToggleButton}">
+                </ToggleButton>
+                <TextBlock
+                    Text="Status:"
+                    VerticalAlignment="Center"
+                    Margin="{StaticResource MarginLeftRight4}"
+                    Style="{StaticResource ToolbarTextBlock}">
+                </TextBlock>
+                <TextBlock
+                    x:Name="txtAutoSpeedTestStatus"
+                    VerticalAlignment="Center"
+                    Margin="{StaticResource MarginLeftRight4}"
+                    Style="{StaticResource ToolbarTextBlock}">
+                </TextBlock>
             </WrapPanel>
             <DataGrid
                 x:Name="lstProfiles"

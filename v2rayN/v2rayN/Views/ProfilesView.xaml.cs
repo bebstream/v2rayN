@@ -1,7 +1,8 @@
+using MaterialDesignThemes.Wpf;
+using System.Reactive.Disposables;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
-using MaterialDesignThemes.Wpf;
 using v2rayN.Base;
 using Point = System.Windows.Point;
 
@@ -71,6 +72,8 @@ public partial class ProfilesView
             this.BindCommand(ViewModel, vm => vm.MoveBottomCmd, v => v.menuMoveBottom).DisposeWith(disposables);
 
             //servers ping
+            this.OneWayBind(ViewModel, vm => vm.AutoSpeedTestStatus, v => v.txtAutoSpeedTestStatus.Text).DisposeWith(disposables);
+            this.Bind(ViewModel, vm => vm.IsAutoSpeedTestEnabled, v => v.togAutoSpeedTest.IsChecked).DisposeWith(disposables);
             this.BindCommand(ViewModel, vm => vm.MixedTestServerCmd, v => v.menuMixedTestServer).DisposeWith(disposables);
             this.BindCommand(ViewModel, vm => vm.TcpingServerCmd, v => v.menuTcpingServer).DisposeWith(disposables);
             this.BindCommand(ViewModel, vm => vm.RealPingServerCmd, v => v.menuRealPingServer).DisposeWith(disposables);

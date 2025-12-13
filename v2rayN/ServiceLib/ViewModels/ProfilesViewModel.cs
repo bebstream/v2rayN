@@ -81,6 +81,8 @@ public class ProfilesViewModel : MyReactiveObject
     public ReactiveCommand<Unit, Unit> EditSubCmd { get; }
     public ReactiveCommand<Unit, Unit> DeleteSubCmd { get; }
 
+    private HashSet<string> setIndexIdOfDelayValueSmallerThanFiveHundred = [];
+
     private HashSet<String> setIndexIdOfSpeedValueBiggerThanOne = [];
 
     private HashSet<String> setIndexIdOfSpeedValueBiggerThanZero = [];
@@ -111,6 +113,9 @@ public class ProfilesViewModel : MyReactiveObject
         get => _autoSpeedTestStatus;
         set => this.RaiseAndSetIfChanged(ref _autoSpeedTestStatus, value);
     }
+
+    // 是否有测延迟在运行中
+    private bool isDelayTestRunning = false;
 
     // 是否有测速在运行中
     private bool isSpeedTestRunning = false;
@@ -448,21 +453,33 @@ public class ProfilesViewModel : MyReactiveObject
     {
         try
         {
-            // 1. 执行一键多线程测试
-            await SetAutoSpeedTestStatus("Step 1 of 8 : Running speed test.");
+            // 1. 执行一键测试真连接延迟
+            await SetAutoSpeedTestStatus("Step 1 of 12 : Running delay test.");
+            await DoDelayTest();
+
+
+            // 2. 按延迟排序
+            await SetAutoSpeedTestStatus("Step 2 of 12 : Sorting delay test result.");
+            await DoSortServerByDelay();
+
+
+            // 3. 执行一键多线程测试
+            await SetAutoSpeedTestStatus("Step 3 of 12 : Running speed test.");
             await DoSpeedTest();
 
-            // 2. 按速度排序
-            await SetAutoSpeedTestStatus("Step 2 of 8 : Sorting speed test result.");
-            await DoSortServer();
 
-            // 3. 选择最快服务器（特殊逻辑）
-            await SetAutoSpeedTestStatus("Step 3 of 8 : Setting active server.");
+            // 4. 按速度排序
+            await SetAutoSpeedTestStatus("Step 4 of 12 : Sorting speed test result.");
+            await DoSortServerBySpeed();
+
+
+            // 5. 选择最快服务器（特殊逻辑）
+            await SetAutoSpeedTestStatus("Step 5 of 12 : Setting active server.");
             await DoSetServer();
 
 
-            // 4. 更新全部订阅（通过代理）
-            await SetAutoSpeedTestStatus("Step 4 of 8 : Updating all subscriptions.");
+            // 6. 更新全部订阅（通过代理）
+            await SetAutoSpeedTestStatus("Step 6 of 12 : Updating all subscriptions.");
             Logging.SaveLog("UpdateSubscriptionProcess begin...");
             await UpdateSubscriptionProcess("", true);
             Logging.SaveLog("Wait 10 seconds...");
@@ -470,8 +487,8 @@ public class ProfilesViewModel : MyReactiveObject
             Logging.SaveLog("UpdateSubscriptionProcess end.");
 
 
-            // 5. 移除重复
-            await SetAutoSpeedTestStatus("Step 5 of 8 : Removing duplicated server.");
+            // 7. 移除重复
+            await SetAutoSpeedTestStatus("Step 7 of 12 : Removing duplicated server.");
             Logging.SaveLog("RemoveDuplicateServerDoNow begin...");
             await RemoveDuplicateServerDoNow();
             Logging.SaveLog("Wait 10 seconds...");
@@ -479,20 +496,37 @@ public class ProfilesViewModel : MyReactiveObject
             Logging.SaveLog("RemoveDuplicateServerDoNow end.");
 
 
-            // 6. 再次执行一键多线程测试
-            await SetAutoSpeedTestStatus("Step 6 of 8 : Running speed test again.");
-            // 1. 执行一键多线程测试
+            // 8. 再次执行一键测试真连接延迟
+            await SetAutoSpeedTestStatus("Step 8 of 12 : Running delay test again.");
+            // 1. 执行一键测试真连接延迟
+            await DoDelayTest();
+
+
+            // 9. 再次按延迟排序
+            await SetAutoSpeedTestStatus("Step 9 of 12 : Sorting delay test result again.");
+            // 2. 按延迟排序
+            await DoSortServerByDelay();
+
+
+            // 10. 再次执行一键多线程测试
+            await SetAutoSpeedTestStatus("Step 10 of 12 : Running speed test again.");
+            // 3. 执行一键多线程测试
             await DoSpeedTest();
 
-            // 7. 再次按速度排序
-            await SetAutoSpeedTestStatus("Step 7 of 8 : Sorting speed test result again.");
-            // 2. 按速度排序
-            await DoSortServer();
 
-            // 8. 再次选择最快服务器（特殊逻辑）
-            await SetAutoSpeedTestStatus("Step 8 of 8 : Setting active server again.");
-            // 3. 选择最快服务器（特殊逻辑）
+            // 11. 再次按速度排序
+            await SetAutoSpeedTestStatus("Step 11 of 12 : Sorting speed test result again.");
+            // 4. 按速度排序
+            await DoSortServerBySpeed();
+
+
+            // 12. 再次选择最快服务器（特殊逻辑）
+            await SetAutoSpeedTestStatus("Step 12 of 12 : Setting active server again.");
+            // 5. 选择最快服务器（特殊逻辑）
             await DoSetServer();
+
+
+
         }
         catch (Exception ex)
         {
@@ -504,6 +538,72 @@ public class ProfilesViewModel : MyReactiveObject
         await Task.CompletedTask;
 
         return Unit.Default;
+    }
+
+    private async Task DoDelayTest()
+    {
+        Logging.SaveLog("Reset setIndexIdOfDelayValueSmallerThanFiveHundred to empty before delay test run.");
+        setIndexIdOfDelayValueSmallerThanFiveHundred.Clear();
+
+        Logging.SaveLog("Stop the might running delay test first.");
+        isDelayTestRunning = false;
+        ServerSpeedtestStop();
+        Logging.SaveLog("Wait 10 seconds...");
+        Thread.Sleep(1000 * 10);
+
+        Logging.SaveLog("ServerSpeedtest delay test begin...");
+        isDelayTestRunning = true;
+        await ServerSpeedtest(ESpeedActionType.FastRealping);
+
+        while (isDelayTestRunning)
+        {
+            int oldSetIndexIdOfDelayValueSmallerThanFiveHundredCount = setIndexIdOfDelayValueSmallerThanFiveHundred.Count;
+            Logging.SaveLog("Delay test is running, waiting for 2 minutes.");
+            Thread.Sleep(1000 * 120);
+            if (setIndexIdOfDelayValueSmallerThanFiveHundred.Count == oldSetIndexIdOfDelayValueSmallerThanFiveHundredCount)
+            {
+                Logging.SaveLog("No test is running during the 2 minutes.");
+                Logging.SaveLog("Stop the current round of test now.");
+                isDelayTestRunning = false;
+                ServerSpeedtestStop();
+                Logging.SaveLog("Wait 10 seconds...");
+                Thread.Sleep(1000 * 10);
+            }
+        }
+
+        Logging.SaveLog("ServerSpeedtest delay test end.");
+    }
+
+    private async Task DoSortServerByDelay()
+    {
+        Logging.SaveLog("SortServer by delay begin...");
+        await SortServer(EServerColName.DelayVal.ToString());
+        Logging.SaveLog("Wait 10 seconds...");
+        Thread.Sleep(1000 * 10);
+        if (ProfileItems.Count > 1)
+        {
+            ProfileItemModel firstItem = ProfileItems[0];
+            int firstDelayValue = 0;
+            int nextDelayValue = 0;
+
+            int.TryParse(firstItem.DelayVal, out firstDelayValue);
+
+            int index = 1;
+            do
+            {
+                ProfileItemModel nextItem = ProfileItems[index];
+                int.TryParse(nextItem.DelayVal, out nextDelayValue);
+                index++;
+            } while (index < ProfileItems.Count && firstDelayValue.Equals(nextDelayValue));
+
+            if (firstDelayValue > nextDelayValue)
+            {
+                await SortServer(EServerColName.DelayVal.ToString());
+                Logging.SaveLog("Wait 10 seconds...");
+                Thread.Sleep(1000 * 10);
+            }
+        }
+        Logging.SaveLog("SortServer by delay end.");
     }
 
     private async Task DoSpeedTest()
@@ -540,9 +640,9 @@ public class ProfilesViewModel : MyReactiveObject
         Logging.SaveLog("ServerSpeedtest end.");
     }
 
-    private async Task DoSortServer()
+    private async Task DoSortServerBySpeed()
     {
-        Logging.SaveLog("SortServer begin...");
+        Logging.SaveLog("SortServer by speed begin...");
         await SortServer(EServerColName.SpeedVal.ToString());
         Logging.SaveLog("Wait 10 seconds...");
         Thread.Sleep(1000 * 10);
@@ -569,7 +669,7 @@ public class ProfilesViewModel : MyReactiveObject
                 Thread.Sleep(1000 * 10);
             }
         }
-        Logging.SaveLog("SortServer end.");
+        Logging.SaveLog("SortServer by speed end.");
     }
 
     private async Task DoSetServer()
@@ -723,6 +823,28 @@ public class ProfilesViewModel : MyReactiveObject
         {
             item.Delay = result.Delay.ToInt();
             item.DelayVal = result.Delay ?? string.Empty;
+
+            if (item.Delay is > 0 and < 500)
+            {
+                int beforeCount = setIndexIdOfDelayValueSmallerThanFiveHundred.Count;
+
+                setIndexIdOfDelayValueSmallerThanFiveHundred.Add(item.IndexId);
+
+                int afterCount = setIndexIdOfDelayValueSmallerThanFiveHundred.Count;
+
+                if (beforeCount < afterCount)
+                {
+                    Logging.SaveLog("Current delay value smaller than five hundred items count: " + setIndexIdOfDelayValueSmallerThanFiveHundred.Count);
+                }
+            }
+
+            if (setIndexIdOfDelayValueSmallerThanFiveHundred.Count >= 200)
+            {
+                Logging.SaveLog("setIndexIdOfDelayValueSmallerThanFiveHundred.Count is bigger than 200. Stop the current round of delay test now.");
+
+                isDelayTestRunning = false;
+                ServerSpeedtestStop();
+            }
         }
         if (result.Speed.IsNotEmpty())
         {
@@ -768,7 +890,6 @@ public class ProfilesViewModel : MyReactiveObject
                 isSpeedTestRunning = false;
                 ServerSpeedtestStop();
             }
-
         }
         await Task.CompletedTask;
     }

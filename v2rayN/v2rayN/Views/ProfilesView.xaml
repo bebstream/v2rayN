@@ -109,6 +109,15 @@
                     Margin="{StaticResource MarginLeftRight4}"
                     Style="{StaticResource MaterialDesignSwitchToggleButton}">
                 </ToggleButton>
+                <Button
+                    x:Name="btnAutoSpeedTest"
+                    Width="30"
+                    Height="30"
+                    Margin="{StaticResource MarginLeftRight4}"
+                    Style="{StaticResource MaterialDesignFloatingActionMiniLightButton}"
+                    ToolTip="Trigger auto speed test now">
+                    <materialDesign:PackIcon VerticalAlignment="Center" Kind="Kickboxing" />
+                </Button>
                 <TextBlock
                     Text="Status:"
                     VerticalAlignment="Center"

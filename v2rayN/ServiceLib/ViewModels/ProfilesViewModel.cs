@@ -62,7 +62,7 @@ public class ProfilesViewModel : MyReactiveObject
 
     //servers ping
     public ReactiveCommand<Unit, Unit> MixedTestServerCmd { get; }
-
+    public ReactiveCommand<Unit, Unit> AutoSpeedTestCmd { get; }
     public ReactiveCommand<Unit, Unit> TcpingServerCmd { get; }
     public ReactiveCommand<Unit, Unit> RealPingServerCmd { get; }
     public ReactiveCommand<Unit, Unit> SpeedServerCmd { get; }
@@ -224,6 +224,21 @@ public class ProfilesViewModel : MyReactiveObject
         }, canEditRemove);
 
         //servers ping
+        AutoSpeedTestCmd = ReactiveCommand.CreateFromTask(async () =>
+        {
+            // fire-and-forget，明确放到后台线程
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await CheckEvenHourTrigger(true);
+                }
+                catch (Exception ex)
+                {
+                    Logging.SaveLog("CheckEvenHourTrigger failed : " + ex.ToString());
+                }
+            });
+        });
         FastRealPingCmd = ReactiveCommand.CreateFromTask(async () =>
         {
             await ServerSpeedtest(ESpeedActionType.FastRealping);
@@ -343,7 +358,7 @@ public class ProfilesViewModel : MyReactiveObject
 
         // 每秒检测是否到双数整点（不是整点不会触发）
         Observable.Interval(TimeSpan.FromSeconds(1))
-            .Subscribe(async _ => await CheckEvenHourTrigger())
+            .Subscribe(async _ => await CheckEvenHourTrigger(false))
             .DisposeWith(_disposables);
     }
 
@@ -373,9 +388,8 @@ public class ProfilesViewModel : MyReactiveObject
     // ---------------------------------------------------------
     // 3) 检测是否到双数整点
     // ---------------------------------------------------------
-    private DateTime _lastTriggered = DateTime.MinValue;
     private bool _isInAutoSpeedTestRound = false;
-    private async Task CheckEvenHourTrigger()
+    private async Task CheckEvenHourTrigger(bool isTriggeredManually)
     {
         if (IsAutoSpeedTestEnabled == false)
         {
@@ -387,15 +401,13 @@ public class ProfilesViewModel : MyReactiveObject
         }
 
         var now = DateTime.Now;
-        if (now.Minute == 0 && now.Hour % 2 == 0)
+        if ((now.Minute == 0 && now.Hour % 2 == 0) || (isTriggeredManually == true))    // Triggered by timer at even hour or triggered by manually hitting the button
         {
-            // 防止同一时间重复触发
-            if (_lastTriggered.Hour == now.Hour && _lastTriggered.Date == now.Date)
+            // 防止在运行自动测试的过程中，被再次触发
+            if (_isInAutoSpeedTestRound)
             {
                 return;
             }
-            
-            _lastTriggered = now;
 
             Logging.SaveLog("AutoSpeedTest is enabled. Speed test begin to run...");
 

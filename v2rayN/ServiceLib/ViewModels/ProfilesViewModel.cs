@@ -83,9 +83,11 @@ public class ProfilesViewModel : MyReactiveObject
 
     private HashSet<string> setIndexIdOfDelayValueSmallerThanFiveHundred = [];
 
+    /* Version 1 logic
     private HashSet<String> setIndexIdOfSpeedValueBiggerThanOne = [];
 
     private HashSet<String> setIndexIdOfSpeedValueBiggerThanZero = [];
+    */
 
     // Disposables
     private readonly CompositeDisposable _disposables = [];
@@ -608,6 +610,7 @@ public class ProfilesViewModel : MyReactiveObject
 
     private async Task DoSpeedTest()
     {
+        /* Version 1 logic
         Logging.SaveLog("Reset setIndexIdOfSpeedValueBiggerThanOne and setIndexIdOfSpeedValueBiggerThanZero to empty before speed test run.");
         setIndexIdOfSpeedValueBiggerThanOne.Clear();
         setIndexIdOfSpeedValueBiggerThanZero.Clear();
@@ -638,6 +641,36 @@ public class ProfilesViewModel : MyReactiveObject
             }
         }
         Logging.SaveLog("ServerSpeedtest end.");
+        */
+
+        // Version 2 logic
+        Logging.SaveLog("Stop the might running speed test first.");
+        isSpeedTestRunning = false;
+        ServerSpeedtestStop();
+        Logging.SaveLog("Wait 10 seconds...");
+        Thread.Sleep(1000 * 10);
+
+        Logging.SaveLog("ServerSpeedtest begin...");
+        isSpeedTestRunning = true;
+        await ServerSpeedtest(ESpeedActionType.Mixedtest);
+        while (isSpeedTestRunning)
+        {
+            int oldSetIndexIdOfDelayValueSmallerThanFiveHundredCount = setIndexIdOfDelayValueSmallerThanFiveHundred.Count;
+            Logging.SaveLog("Speed test is running, waiting for 2 minutes.");
+            Thread.Sleep(1000 * 120);
+            if (setIndexIdOfDelayValueSmallerThanFiveHundred.Count <= 0 || setIndexIdOfDelayValueSmallerThanFiveHundred.Count == oldSetIndexIdOfDelayValueSmallerThanFiveHundredCount)
+            {
+                Logging.SaveLog("No test is running during the 2 minutes.");
+                Logging.SaveLog("Stop the current round of test now.");
+                isSpeedTestRunning = false;
+                ServerSpeedtestStop();
+                Logging.SaveLog("Wait 10 seconds...");
+                Thread.Sleep(1000 * 10);
+            }
+        }
+
+        Logging.SaveLog("ServerSpeedtest end.");
+
     }
 
     private async Task DoSortServerBySpeed()
@@ -824,26 +857,22 @@ public class ProfilesViewModel : MyReactiveObject
             item.Delay = result.Delay.ToInt();
             item.DelayVal = result.Delay ?? string.Empty;
 
-            if (item.Delay is > 0 and < 500)
+            if ((isDelayTestRunning == true) && (item.Delay is > 0 and < 500))  // Only add the item to set while delay test running.
             {
-                int beforeCount = setIndexIdOfDelayValueSmallerThanFiveHundred.Count;
+                bool boolNewAdded = setIndexIdOfDelayValueSmallerThanFiveHundred.Add(item.IndexId);
 
-                setIndexIdOfDelayValueSmallerThanFiveHundred.Add(item.IndexId);
-
-                int afterCount = setIndexIdOfDelayValueSmallerThanFiveHundred.Count;
-
-                if (beforeCount < afterCount)
+                if (boolNewAdded)
                 {
                     Logging.SaveLog("Current delay value smaller than five hundred items count: " + setIndexIdOfDelayValueSmallerThanFiveHundred.Count);
                 }
-            }
 
-            if (setIndexIdOfDelayValueSmallerThanFiveHundred.Count >= 200)
-            {
-                Logging.SaveLog("setIndexIdOfDelayValueSmallerThanFiveHundred.Count is bigger than 200. Stop the current round of delay test now.");
+                if (setIndexIdOfDelayValueSmallerThanFiveHundred.Count >= 200)
+                {
+                    Logging.SaveLog("setIndexIdOfDelayValueSmallerThanFiveHundred.Count is bigger than 200. Stop the current round of delay test now.");
 
-                isDelayTestRunning = false;
-                ServerSpeedtestStop();
+                    isDelayTestRunning = false;
+                    ServerSpeedtestStop();
+                }
             }
         }
         if (result.Speed.IsNotEmpty())
@@ -855,29 +884,22 @@ public class ProfilesViewModel : MyReactiveObject
             //Logging.SaveLog("Current test result item DelayVal: " + item.DelayVal);
             //Logging.SaveLog("Current test result item SpeedVal: " + item.SpeedVal);
 
+            /*  Version 1 logic
             double speedValue = 0.0;
-            if (double.TryParse(item.SpeedVal, out speedValue) && speedValue > 1.0)
+            if (isSpeedTestRunning == true && double.TryParse(item.SpeedVal, out speedValue) && speedValue > 1.0)
             {
-                int beforeCount = setIndexIdOfSpeedValueBiggerThanOne.Count;
-                
-                setIndexIdOfSpeedValueBiggerThanOne.Add(item.IndexId);
-                
-                int afterCount = setIndexIdOfSpeedValueBiggerThanOne.Count;
+                bool boolNewAdded = setIndexIdOfSpeedValueBiggerThanOne.Add(item.IndexId);
 
-                if (beforeCount < afterCount)
+                if (boolNewAdded)
                 {
                     Logging.SaveLog("Current speed value bigger than one items count: " + setIndexIdOfSpeedValueBiggerThanOne.Count);
                 }
             }
-            if (double.TryParse(item.SpeedVal, out speedValue) && speedValue > 0.0)
+            if (isSpeedTestRunning == true && double.TryParse(item.SpeedVal, out speedValue) && speedValue > 0.0)
             {
-                int beforeCount = setIndexIdOfSpeedValueBiggerThanZero.Count;
+                bool boolNewAdded = setIndexIdOfSpeedValueBiggerThanZero.Add(item.IndexId);
 
-                setIndexIdOfSpeedValueBiggerThanZero.Add(item.IndexId);
-                
-                int afterCount = setIndexIdOfSpeedValueBiggerThanZero.Count;
-
-                if (beforeCount < afterCount)
+                if (boolNewAdded)
                 {
                     Logging.SaveLog("Current speed value bigger than zero items count: " + setIndexIdOfSpeedValueBiggerThanZero.Count);
                 }
@@ -889,6 +911,18 @@ public class ProfilesViewModel : MyReactiveObject
 
                 isSpeedTestRunning = false;
                 ServerSpeedtestStop();
+            }
+            */
+
+            // Version 2 logic
+            if (isDelayTestRunning == false && isSpeedTestRunning == true && double.TryParse(item.SpeedVal, out var speedValue) && speedValue >= 0.0)
+            {
+                setIndexIdOfDelayValueSmallerThanFiveHundred.Remove(item.IndexId);
+                if (setIndexIdOfDelayValueSmallerThanFiveHundred.Count <= 0)
+                {
+                    isSpeedTestRunning = false;
+                    ServerSpeedtestStop();
+                }
             }
         }
         await Task.CompletedTask;

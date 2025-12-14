@@ -656,8 +656,16 @@ public class ProfilesViewModel : MyReactiveObject
         while (isSpeedTestRunning)
         {
             int oldSetIndexIdOfDelayValueSmallerThanFiveHundredCount = setIndexIdOfDelayValueSmallerThanFiveHundred.Count;
+
+            Logging.SaveLog("setIndexIdOfDelayValueSmallerThanFiveHundred.Count before sleep : " + setIndexIdOfDelayValueSmallerThanFiveHundred.Count);
+
+
             Logging.SaveLog("Speed test is running, waiting for 2 minutes.");
             Thread.Sleep(1000 * 120);
+
+            Logging.SaveLog("setIndexIdOfDelayValueSmallerThanFiveHundred.Count after sleep : " + setIndexIdOfDelayValueSmallerThanFiveHundred.Count);
+
+
             if (setIndexIdOfDelayValueSmallerThanFiveHundred.Count <= 0 || setIndexIdOfDelayValueSmallerThanFiveHundred.Count == oldSetIndexIdOfDelayValueSmallerThanFiveHundredCount)
             {
                 Logging.SaveLog("No test is running during the 2 minutes.");
@@ -918,10 +926,19 @@ public class ProfilesViewModel : MyReactiveObject
             if (isDelayTestRunning == false && isSpeedTestRunning == true && double.TryParse(item.SpeedVal, out var speedValue) && speedValue >= 0.0)
             {
                 setIndexIdOfDelayValueSmallerThanFiveHundred.Remove(item.IndexId);
+
+                Logging.SaveLog("setIndexIdOfDelayValueSmallerThanFiveHundred.Count : " + setIndexIdOfDelayValueSmallerThanFiveHundred.Count);
+                Logging.SaveLog("removed item.IndexId : " + item.IndexId);
+                Logging.SaveLog("speedValue : " + speedValue);
+
+
+
                 if (setIndexIdOfDelayValueSmallerThanFiveHundred.Count <= 0)
                 {
                     isSpeedTestRunning = false;
                     ServerSpeedtestStop();
+                    Logging.SaveLog("ServerSpeedtestStop : here");
+
                 }
             }
         }

@@ -83,6 +83,12 @@ public class ProfilesViewModel : MyReactiveObject
 
     private HashSet<string> setIndexIdOfDelayValueSmallerThanFiveHundred = [];
 
+    private HashSet<string> setIndexIdOfInvalidServersOne = [];
+
+    private HashSet<string> setIndexIdOfInvalidServersTwo = [];
+
+    private HashSet<string> setIndexIdOfInvalidServersThree = [];
+
     /* Version 1 logic
     private HashSet<String> setIndexIdOfSpeedValueBiggerThanOne = [];
 
@@ -369,7 +375,6 @@ public class ProfilesViewModel : MyReactiveObject
             .DisposeWith(_disposables);
     }
 
-
     // ---------------------------------------------------------
     // 2) 计算“距离下一个双数整点”的时间
     // ---------------------------------------------------------
@@ -378,7 +383,10 @@ public class ProfilesViewModel : MyReactiveObject
         var now = DateTime.Now;
 
         int nextEvenHour = (now.Hour % 2 == 0) ? now.Hour + 2 : now.Hour + 1;
-        if (nextEvenHour >= 24) nextEvenHour -= 24;
+        if (nextEvenHour >= 24)
+        {
+            nextEvenHour -= 24;
+        }
 
         var nextTime = new DateTime(now.Year, now.Month, now.Day, nextEvenHour, 0, 0);
         if (nextTime <= now)
@@ -390,7 +398,6 @@ public class ProfilesViewModel : MyReactiveObject
 
         return $"{remaining.Hours:D2}:{remaining.Minutes:D2}:{remaining.Seconds:D2}";
     }
-
 
     // ---------------------------------------------------------
     // 3) 检测是否到双数整点
@@ -447,7 +454,6 @@ public class ProfilesViewModel : MyReactiveObject
         }
     }
 
-
     // ---------------------------------------------------------
     // 4) 自动测速主流程
     // ---------------------------------------------------------
@@ -455,91 +461,99 @@ public class ProfilesViewModel : MyReactiveObject
     {
         try
         {
-            // 1. 执行一键测试真连接延迟
-            await SetAutoSpeedTestStatus("Step 1 of 12 : Running delay test.");
-            await DoDelayTest();
+            bool isNeedUpdate;
+            do
+            {
+                var sw = Stopwatch.StartNew();
 
+                // 1. 执行一键测试真连接延迟
+                await SetAutoSpeedTestStatus("Step 1 of 8 : Running delay test.");
+                await DoDelayTest();
+                await DoCollectInvalidServers(setIndexIdOfInvalidServersOne);
+                await DoDelayTest();
+                await DoCollectInvalidServers(setIndexIdOfInvalidServersTwo);
+                await DoDelayTest();
+                await DoCollectInvalidServers(setIndexIdOfInvalidServersThree);
 
-            // 2. 按延迟排序
-            await SetAutoSpeedTestStatus("Step 2 of 12 : Sorting delay test result.");
-            await DoSortServerByDelay();
+                // 2. 移除无效的 Server
+                await SetAutoSpeedTestStatus("Step 2 of 8 : Removing invalid servers.");
+                await DoRemoveInvalidByDelay();
 
+                // 3. 按延迟排序
+                await SetAutoSpeedTestStatus("Step 3 of 8 : Sorting by delay test result.");
+                await DoSortByDelay();
 
-            // 3. 执行一键多线程测试
-            await SetAutoSpeedTestStatus("Step 3 of 12 : Running speed test.");
-            await DoSpeedTest();
+                // 4. 执行一键多线程测试延迟和速度
+                await SetAutoSpeedTestStatus("Step 4 of 8 : Running speed test.");
+                await DoSpeedTest();
 
+                // 5. 按速度排序
+                await SetAutoSpeedTestStatus("Step 5 of 8 : Sorting by speed test result.");
+                await DoSortBySpeed();
 
-            // 4. 按速度排序
-            await SetAutoSpeedTestStatus("Step 4 of 12 : Sorting speed test result.");
-            await DoSortServerBySpeed();
+                // 6. 选择最快服务器（特殊逻辑）
+                await SetAutoSpeedTestStatus("Step 6 of 8 : Setting active server.");
+                await DoSetServer();
 
+                sw.Stop();
 
-            // 5. 选择最快服务器（特殊逻辑）
-            await SetAutoSpeedTestStatus("Step 5 of 12 : Setting active server.");
-            await DoSetServer();
+                string LastTestDuration = $"{sw.Elapsed}";
+                LastTestDuration = LastTestDuration.Substring(0, 8);
 
+                // 当 ProfileItems 数量少于 50 ，或者 速度大于 5 的数量少于 5，则更新订阅。如果不是，则重复 1 - 6 步骤。
+                isNeedUpdate = await IsNeedUpdate();
+                if (!isNeedUpdate)
+                {
+                    await SetAutoSpeedTestStatus("Last small round of test duration : " + LastTestDuration + "  Waiting for 2 minutes to run next round to test.");
 
-            // 6. 更新全部订阅（通过代理）
-            await SetAutoSpeedTestStatus("Step 6 of 12 : Updating all subscriptions.");
-            Logging.SaveLog("UpdateSubscriptionProcess begin...");
-            await UpdateSubscriptionProcess("", true);
-            Logging.SaveLog("Wait 10 seconds...");
-            Thread.Sleep(1000 * 10);
-            Logging.SaveLog("UpdateSubscriptionProcess end.");
+                    Logging.SaveLog("Current small round of test running done with duration : " + LastTestDuration + ", status is good, no need to update subscriptions, waiting for 2 minutes to run next round to test.");
+                    Thread.Sleep(1000 * 120);
+                }
 
+            } while (!isNeedUpdate);
 
-            // 7. 移除重复
-            await SetAutoSpeedTestStatus("Step 7 of 12 : Removing duplicated server.");
-            Logging.SaveLog("RemoveDuplicateServerDoNow begin...");
-            await RemoveDuplicateServerDoNow();
-            Logging.SaveLog("Wait 10 seconds...");
-            Thread.Sleep(1000 * 10);
-            Logging.SaveLog("RemoveDuplicateServerDoNow end.");
+            // 7. 更新全部订阅（通过代理）
+            await SetAutoSpeedTestStatus("Step 7 of 8 : Updating all subscriptions.");
+            await DoUpdateSubscription();
 
-
-            // 8. 再次执行一键测试真连接延迟
-            await SetAutoSpeedTestStatus("Step 8 of 12 : Running delay test again.");
-            // 1. 执行一键测试真连接延迟
-            await DoDelayTest();
-
-
-            // 9. 再次按延迟排序
-            await SetAutoSpeedTestStatus("Step 9 of 12 : Sorting delay test result again.");
-            // 2. 按延迟排序
-            await DoSortServerByDelay();
-
-
-            // 10. 再次执行一键多线程测试
-            await SetAutoSpeedTestStatus("Step 10 of 12 : Running speed test again.");
-            // 3. 执行一键多线程测试
-            await DoSpeedTest();
-
-
-            // 11. 再次按速度排序
-            await SetAutoSpeedTestStatus("Step 11 of 12 : Sorting speed test result again.");
-            // 4. 按速度排序
-            await DoSortServerBySpeed();
-
-
-            // 12. 再次选择最快服务器（特殊逻辑）
-            await SetAutoSpeedTestStatus("Step 12 of 12 : Setting active server again.");
-            // 5. 选择最快服务器（特殊逻辑）
-            await DoSetServer();
-
-
-
+            // 8. 移除重复
+            await SetAutoSpeedTestStatus("Step 8 of 8 : Removing duplicated server.");
+            await DoRemoveDuplication();
         }
         catch (Exception ex)
         {
             Logging.SaveLog($"{ex.Message}");
         }
 
-        await SetAutoSpeedTestStatus("AutoSpeedTest running done, waiting for next round to run.");
-
         await Task.CompletedTask;
 
         return Unit.Default;
+    }
+
+    private async Task<bool> IsNeedUpdate()
+    {
+        // ProfileItems 总数小于 50
+        if (ProfileItems.Count < 50)
+        {
+            return true;
+        }
+
+        // 在 ProfileItems 里统计速度大于 5 的 server 的数量
+        int speedValueBiggerThanFiveCount = 0;
+        foreach (var item in ProfileItems)
+        {
+            if (item.Delay < 500 && item.Speed > 5)
+            {
+                speedValueBiggerThanFiveCount++;
+            }
+        }
+
+        if (speedValueBiggerThanFiveCount < 5)
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private async Task DoDelayTest()
@@ -560,12 +574,16 @@ public class ProfilesViewModel : MyReactiveObject
         while (isDelayTestRunning)
         {
             int oldSetIndexIdOfDelayValueSmallerThanFiveHundredCount = setIndexIdOfDelayValueSmallerThanFiveHundred.Count;
+
             Logging.SaveLog("Delay test is running, waiting for 2 minutes.");
             Thread.Sleep(1000 * 120);
+
+            Logging.SaveLog("setIndexIdOfDelayValueSmallerThanFiveHundred.Count before sleep : " + oldSetIndexIdOfDelayValueSmallerThanFiveHundredCount);
+            Logging.SaveLog("setIndexIdOfDelayValueSmallerThanFiveHundred.Count  after sleep : " + setIndexIdOfDelayValueSmallerThanFiveHundred.Count);
+
             if (setIndexIdOfDelayValueSmallerThanFiveHundred.Count == oldSetIndexIdOfDelayValueSmallerThanFiveHundredCount)
             {
-                Logging.SaveLog("No test is running during the 2 minutes.");
-                Logging.SaveLog("Stop the current round of test now.");
+                Logging.SaveLog("Current round of test done or no test is running during the 2 minutes. Stop the current round of test now.");
                 isDelayTestRunning = false;
                 ServerSpeedtestStop();
                 Logging.SaveLog("Wait 10 seconds...");
@@ -576,7 +594,63 @@ public class ProfilesViewModel : MyReactiveObject
         Logging.SaveLog("ServerSpeedtest delay test end.");
     }
 
-    private async Task DoSortServerByDelay()
+
+    private async Task DoCollectInvalidServers(HashSet<string> setIndexIdOfInvalidServers)
+    {
+        setIndexIdOfInvalidServers.Clear();
+        foreach (var item in ProfileItems)
+        {
+            if(item.Delay < 0)
+            {
+                setIndexIdOfInvalidServers.Add(item.IndexId);
+            }
+        }
+    }
+
+    private async Task DoRemoveInvalidByDelay()
+    {
+        Logging.SaveLog("DoRemoveInvalidByDelay by delay begin...");
+
+        // 三个 Set 的交集，即是三次 delay 测试，结果都无效的 server 的集合
+        setIndexIdOfInvalidServersOne.IntersectWith(setIndexIdOfInvalidServersTwo);
+        setIndexIdOfInvalidServersOne.IntersectWith(setIndexIdOfInvalidServersThree);
+
+        var lstSelected = new List<ProfileItem>();
+
+        foreach (var indexId in setIndexIdOfInvalidServersOne)
+        {
+            var item = await AppManager.Instance.GetProfileItem(indexId);
+            if (item is not null)
+            {
+                lstSelected.Add(item);
+            }
+        }
+
+        if (lstSelected == null)
+        {
+            return;
+        }
+
+        var exists = lstSelected.Exists(t => t.IndexId == _config.IndexId);
+
+        await ConfigHandler.RemoveServers(_config, lstSelected);
+        NoticeManager.Instance.Enqueue(ResUI.OperationSuccess);
+        if (lstSelected.Count == ProfileItems.Count)
+        {
+            ProfileItems.Clear();
+        }
+        await RefreshServers();
+        if (exists)
+        {
+            Reload();
+        }
+
+        Logging.SaveLog("Wait 10 seconds...");
+        Thread.Sleep(1000 * 10);
+        Logging.SaveLog("DoRemoveInvalidByDelay by delay end.");
+    }
+
+    private async Task DoSortByDelay()
     {
         Logging.SaveLog("SortServer by delay begin...");
         await SortServer(EServerColName.DelayVal.ToString());
@@ -584,21 +658,17 @@ public class ProfilesViewModel : MyReactiveObject
         Thread.Sleep(1000 * 10);
         if (ProfileItems.Count > 1)
         {
-            ProfileItemModel firstItem = ProfileItems[0];
-            int firstDelayValue = 0;
-            int nextDelayValue = 0;
-
-            int.TryParse(firstItem.DelayVal, out firstDelayValue);
+            int firstDelay = ProfileItems[0].Delay;
+            int nextDelay = 0;
 
             int index = 1;
             do
             {
-                ProfileItemModel nextItem = ProfileItems[index];
-                int.TryParse(nextItem.DelayVal, out nextDelayValue);
+                nextDelay = ProfileItems[index].Delay;
                 index++;
-            } while (index < ProfileItems.Count && firstDelayValue.Equals(nextDelayValue));
+            } while (index < ProfileItems.Count && firstDelay.Equals(nextDelay));
 
-            if (firstDelayValue > nextDelayValue)
+            if (firstDelay > nextDelay)
             {
                 await SortServer(EServerColName.DelayVal.ToString());
                 Logging.SaveLog("Wait 10 seconds...");
@@ -657,19 +727,15 @@ public class ProfilesViewModel : MyReactiveObject
         {
             int oldSetIndexIdOfDelayValueSmallerThanFiveHundredCount = setIndexIdOfDelayValueSmallerThanFiveHundred.Count;
 
-            Logging.SaveLog("setIndexIdOfDelayValueSmallerThanFiveHundred.Count before sleep : " + setIndexIdOfDelayValueSmallerThanFiveHundred.Count);
-
-
             Logging.SaveLog("Speed test is running, waiting for 2 minutes.");
             Thread.Sleep(1000 * 120);
 
-            Logging.SaveLog("setIndexIdOfDelayValueSmallerThanFiveHundred.Count after sleep : " + setIndexIdOfDelayValueSmallerThanFiveHundred.Count);
-
+            Logging.SaveLog("setIndexIdOfDelayValueSmallerThanFiveHundred.Count before sleep : " + oldSetIndexIdOfDelayValueSmallerThanFiveHundredCount);
+            Logging.SaveLog("setIndexIdOfDelayValueSmallerThanFiveHundred.Count  after sleep : " + setIndexIdOfDelayValueSmallerThanFiveHundred.Count);
 
             if (setIndexIdOfDelayValueSmallerThanFiveHundred.Count <= 0 || setIndexIdOfDelayValueSmallerThanFiveHundred.Count == oldSetIndexIdOfDelayValueSmallerThanFiveHundredCount)
             {
-                Logging.SaveLog("No test is running during the 2 minutes.");
-                Logging.SaveLog("Stop the current round of test now.");
+                Logging.SaveLog("Current round of test done or no test is running during the 2 minutes. Stop the current round of test now.");
                 isSpeedTestRunning = false;
                 ServerSpeedtestStop();
                 Logging.SaveLog("Wait 10 seconds...");
@@ -678,10 +744,9 @@ public class ProfilesViewModel : MyReactiveObject
         }
 
         Logging.SaveLog("ServerSpeedtest end.");
-
     }
 
-    private async Task DoSortServerBySpeed()
+    private async Task DoSortBySpeed()
     {
         Logging.SaveLog("SortServer by speed begin...");
         await SortServer(EServerColName.SpeedVal.ToString());
@@ -689,21 +754,17 @@ public class ProfilesViewModel : MyReactiveObject
         Thread.Sleep(1000 * 10);
         if (ProfileItems.Count > 1)
         {
-            ProfileItemModel firstItem = ProfileItems[0];
-            double firstSpeedValue = 0.0;
-            double nextSpeedValue = 0.0;
-
-            double.TryParse(firstItem.SpeedVal, out firstSpeedValue);
+            decimal firstSpeed = ProfileItems[0].Speed;
+            decimal nextSpeed = 0;
 
             int index = 1;
             do
             {
-                ProfileItemModel nextItem = ProfileItems[index];
-                double.TryParse(nextItem.SpeedVal, out nextSpeedValue);
+                nextSpeed= ProfileItems[index].Speed;
                 index++;
-            } while (index < ProfileItems.Count && firstSpeedValue.Equals(nextSpeedValue));
+            } while (index < ProfileItems.Count && firstSpeed.Equals(nextSpeed));
 
-            if (firstSpeedValue < nextSpeedValue)
+            if (firstSpeed < nextSpeed)
             {
                 await SortServer(EServerColName.SpeedVal.ToString());
                 Logging.SaveLog("Wait 10 seconds...");
@@ -738,8 +799,8 @@ public class ProfilesViewModel : MyReactiveObject
             for (int i = 0; i < maxCount; i++)
             {
                 ProfileItemModel profileItemModel = ProfileItems[i];
-                double delayValue = 0.0;
-                if (double.TryParse(profileItemModel.DelayVal, out delayValue) && delayValue < 500.0 )
+
+                if (profileItemModel.Delay < 500)
                 {
                     selected = profileItemModel;
                     break;
@@ -749,9 +810,8 @@ public class ProfilesViewModel : MyReactiveObject
             for (int i = 0; i < maxCount; i++)
             {
                 ProfileItemModel profileItemModel = ProfileItems[i];
-                double delayValue = 0.0;
-                double speedValue = 0.0;
-                if (double.TryParse(profileItemModel.DelayVal, out delayValue) && delayValue < 500.0 && double.TryParse(profileItemModel.SpeedVal, out speedValue) && speedValue > 1.0 && profileItemModel.Remarks.IsNullOrEmpty() == false && (profileItemModel.Remarks.ToLower().Contains("us") || profileItemModel.Remarks.Contains("美国")))
+
+                if (profileItemModel.Delay < 500 && profileItemModel.Speed > 1 && profileItemModel.Remarks.IsNullOrEmpty() == false && (profileItemModel.Remarks.ToLower().Contains("us") || profileItemModel.Remarks.Contains("美国")))
                 {
                     selected = profileItemModel;
                     break;
@@ -778,6 +838,15 @@ public class ProfilesViewModel : MyReactiveObject
         _disposables.Dispose();
     }
 
+    private async Task DoUpdateSubscription()
+    {
+        Logging.SaveLog("UpdateSubscriptionProcess begin...");
+        await UpdateSubscriptionProcess("", true);
+        Logging.SaveLog("Wait 10 seconds...");
+        Thread.Sleep(1000 * 10);
+        Logging.SaveLog("UpdateSubscriptionProcess end.");
+    }
+
     private async Task UpdateSubscriptionProcess(string subId, bool blProxy)
     {
         await Task.Run(async () => await SubscriptionHandler.UpdateProcess(_config, subId, blProxy, UpdateTaskHandler));
@@ -798,6 +867,15 @@ public class ProfilesViewModel : MyReactiveObject
                 AppEvents.AdjustMainLvColWidthRequested.Publish();
             }
         }
+    }
+
+    private async Task DoRemoveDuplication()
+    {
+        Logging.SaveLog("RemoveDuplicateServerDoNow begin...");
+        await RemoveDuplicateServerDoNow();
+        Logging.SaveLog("Wait 10 seconds...");
+        Thread.Sleep(1000 * 10);
+        Logging.SaveLog("RemoveDuplicateServerDoNow end.");
     }
 
     private async Task RemoveDuplicateServerDoNow()
@@ -836,7 +914,6 @@ public class ProfilesViewModel : MyReactiveObject
         });
 
         await Task.CompletedTask;
-
     }
 
     #region Actions
@@ -867,24 +944,25 @@ public class ProfilesViewModel : MyReactiveObject
 
             if ((isDelayTestRunning == true) && (item.Delay is > 0 and < 500))  // Only add the item to set while delay test running.
             {
-                bool boolNewAdded = setIndexIdOfDelayValueSmallerThanFiveHundred.Add(item.IndexId);
+                bool isNewIndexIdAdded = setIndexIdOfDelayValueSmallerThanFiveHundred.Add(item.IndexId);
 
-                if (boolNewAdded)
+                if (isNewIndexIdAdded)
                 {
-                    Logging.SaveLog("Current delay value smaller than five hundred items count: " + setIndexIdOfDelayValueSmallerThanFiveHundred.Count);
+                    Logging.SaveLog("Current new added IndexId of delay value smaller than five hundred: " + item.IndexId + "    Current items count: " + setIndexIdOfDelayValueSmallerThanFiveHundred.Count);
                 }
 
-                if (setIndexIdOfDelayValueSmallerThanFiveHundred.Count >= 200)
-                {
-                    Logging.SaveLog("setIndexIdOfDelayValueSmallerThanFiveHundred.Count is bigger than 200. Stop the current round of delay test now.");
+                //if (setIndexIdOfDelayValueSmallerThanFiveHundred.Count >= 200)
+                //{
+                //    Logging.SaveLog("setIndexIdOfDelayValueSmallerThanFiveHundred.Count is bigger than 200. Stop the current round of delay test now.");
 
-                    isDelayTestRunning = false;
-                    ServerSpeedtestStop();
-                }
+                //    isDelayTestRunning = false;
+                //    ServerSpeedtestStop();
+                //}
             }
         }
         if (result.Speed.IsNotEmpty())
         {
+            item.Speed = Convert.ToDecimal(result.Speed);
             item.SpeedVal = result.Speed ?? string.Empty;
 
             //Logging.SaveLog("Current ProfileItems count: " + ProfileItems.Count);
@@ -923,15 +1001,14 @@ public class ProfilesViewModel : MyReactiveObject
             */
 
             // Version 2 logic
-            if (isDelayTestRunning == false && isSpeedTestRunning == true && double.TryParse(item.SpeedVal, out var speedValue) && speedValue >= 0.0)
+            if (isDelayTestRunning == false && isSpeedTestRunning == true && item.Speed >= 0)
             {
-                setIndexIdOfDelayValueSmallerThanFiveHundred.Remove(item.IndexId);
+                bool isIndexIdRemoved = setIndexIdOfDelayValueSmallerThanFiveHundred.Remove(item.IndexId);
 
-                Logging.SaveLog("setIndexIdOfDelayValueSmallerThanFiveHundred.Count : " + setIndexIdOfDelayValueSmallerThanFiveHundred.Count);
-                Logging.SaveLog("removed item.IndexId : " + item.IndexId);
-                Logging.SaveLog("speedValue : " + speedValue);
-
-
+                if (isIndexIdRemoved)
+                {
+                    Logging.SaveLog("Current removed IndexId of delay value smaller than five hundred: " + item.IndexId + "    Current items count: " + setIndexIdOfDelayValueSmallerThanFiveHundred.Count);
+                }
 
                 if (setIndexIdOfDelayValueSmallerThanFiveHundred.Count <= 0)
                 {

@@ -83,12 +83,6 @@ public class ProfilesViewModel : MyReactiveObject
 
     private HashSet<string> setIndexIdOfDelayValueSmallerThanFiveHundred = [];
 
-    private HashSet<string> setIndexIdOfInvalidServersOne = [];
-
-    private HashSet<string> setIndexIdOfInvalidServersTwo = [];
-
-    private HashSet<string> setIndexIdOfInvalidServersThree = [];
-
     /* Version 1 logic
     private HashSet<String> setIndexIdOfSpeedValueBiggerThanOne = [];
 
@@ -469,11 +463,6 @@ public class ProfilesViewModel : MyReactiveObject
                 // 1. 执行一键测试真连接延迟
                 await SetAutoSpeedTestStatus("Step 1 of 8 : Running delay test.");
                 await DoDelayTest();
-                await DoCollectInvalidServers(setIndexIdOfInvalidServersOne);
-                await DoDelayTest();
-                await DoCollectInvalidServers(setIndexIdOfInvalidServersTwo);
-                await DoDelayTest();
-                await DoCollectInvalidServers(setIndexIdOfInvalidServersThree);
 
                 // 2. 移除无效的 Server
                 await SetAutoSpeedTestStatus("Step 2 of 8 : Removing invalid servers.");
@@ -594,60 +583,13 @@ public class ProfilesViewModel : MyReactiveObject
         Logging.SaveLog("ServerSpeedtest delay test end.");
     }
 
-
-    private async Task DoCollectInvalidServers(HashSet<string> setIndexIdOfInvalidServers)
-    {
-        setIndexIdOfInvalidServers.Clear();
-        foreach (var item in ProfileItems)
-        {
-            if(item.Delay < 0)
-            {
-                setIndexIdOfInvalidServers.Add(item.IndexId);
-            }
-        }
-    }
-
     private async Task DoRemoveInvalidByDelay()
     {
-        Logging.SaveLog("DoRemoveInvalidByDelay by delay begin...");
-
-        // 三个 Set 的交集，即是三次 delay 测试，结果都无效的 server 的集合
-        setIndexIdOfInvalidServersOne.IntersectWith(setIndexIdOfInvalidServersTwo);
-        setIndexIdOfInvalidServersOne.IntersectWith(setIndexIdOfInvalidServersThree);
-
-        var lstSelected = new List<ProfileItem>();
-
-        foreach (var indexId in setIndexIdOfInvalidServersOne)
-        {
-            var item = await AppManager.Instance.GetProfileItem(indexId);
-            if (item is not null)
-            {
-                lstSelected.Add(item);
-            }
-        }
-
-        if (lstSelected == null)
-        {
-            return;
-        }
-
-        var exists = lstSelected.Exists(t => t.IndexId == _config.IndexId);
-
-        await ConfigHandler.RemoveServers(_config, lstSelected);
-        NoticeManager.Instance.Enqueue(ResUI.OperationSuccess);
-        if (lstSelected.Count == ProfileItems.Count)
-        {
-            ProfileItems.Clear();
-        }
-        await RefreshServers();
-        if (exists)
-        {
-            Reload();
-        }
-
+        Logging.SaveLog("RemoveInvalidServerResult by delay begin...");
+        await RemoveInvalidServerResult();
         Logging.SaveLog("Wait 10 seconds...");
         Thread.Sleep(1000 * 10);
-        Logging.SaveLog("DoRemoveInvalidByDelay by delay end.");
+        Logging.SaveLog("RemoveInvalidServerResult by delay end.");
     }
 
     private async Task DoSortByDelay()

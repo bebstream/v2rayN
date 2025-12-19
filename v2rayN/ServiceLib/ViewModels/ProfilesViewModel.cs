@@ -20,9 +20,11 @@ public class ProfilesViewModel : MyReactiveObject
 
     public IObservableCollection<ProfileItemModel> ProfileItems { get; } = new ObservableCollectionExtended<ProfileItemModel>();
 
-    public IObservableCollection<ProfileItemModel> PreviousFailedProfileItems { get; set; } = new ObservableCollectionExtended<ProfileItemModel>();
+    public IObservableCollection<ProfileItemModel> ProfileItemsFailedFirst { get; set; } = new ObservableCollectionExtended<ProfileItemModel>();
 
-    public IObservableCollection<ProfileItemModel> CurrentFailedProfileItems { get; set; } = new ObservableCollectionExtended<ProfileItemModel>();
+    public IObservableCollection<ProfileItemModel> ProfileItemsFailedLast { get; set; } = new ObservableCollectionExtended<ProfileItemModel>();
+
+    public IObservableCollection<ProfileItemModel> ProfileItemsFailedCurrent { get; set; } = new ObservableCollectionExtended<ProfileItemModel>();
 
     public IObservableCollection<SubItem> SubItems { get; } = new ObservableCollectionExtended<SubItem>();
 
@@ -607,21 +609,24 @@ public class ProfilesViewModel : MyReactiveObject
     {
         Logging.SaveLog("DoRemoveInvalidBySpeed begin...");
 
-        CurrentFailedProfileItems.Clear();
-        CurrentFailedProfileItems.AddRange<ProfileItemModel>(ProfileItems.Where(item => item.SpeedVal.IsNullOrEmpty() ||
+        ProfileItemsFailedCurrent.Clear();
+        ProfileItemsFailedCurrent.AddRange<ProfileItemModel>(ProfileItems.Where(item =>   item.SpeedVal.IsNullOrEmpty() ||
                                                                                         item.SpeedVal == ResUI.SpeedtestingSkip ||
                                                                                         decimal.TryParse(item.SpeedVal, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var valueResult) == false
-                                                                               ).ToList());
+                                                                             ).ToList());
 
-        var FailedTwiceProfileItems = (IObservableCollection<ProfileItemModel>)CurrentFailedProfileItems.IntersectBy<ProfileItemModel, string>(PreviousFailedProfileItems.Select(it => it.IndexId), item => item.IndexId);
+        var FailedProfileItemsTwoTimes = (IObservableCollection<ProfileItemModel>)ProfileItemsFailedCurrent.IntersectBy<ProfileItemModel, string>(ProfileItemsFailedLast.Select(it => it.IndexId), item => item.IndexId);
 
-        Logging.SaveLog("PreFailedProfileItems.Count     : " + PreviousFailedProfileItems.Count);
-        Logging.SaveLog("CurrentFailedProfileItems.Count : " + CurrentFailedProfileItems.Count);
-        Logging.SaveLog("FailedTwiceProfileItems.Count   : " + FailedTwiceProfileItems.Count);
+        var FailedProfileItemsThreeTimes = (IObservableCollection<ProfileItemModel>)FailedProfileItemsTwoTimes.IntersectBy<ProfileItemModel, string>(ProfileItemsFailedFirst.Select(it => it.IndexId), item => item.IndexId);
+
+        Logging.SaveLog("ProfileItemsFailedFirst.Count      : " + ProfileItemsFailedFirst.Count);
+        Logging.SaveLog("ProfileItemsFailedLast.Count       : " + ProfileItemsFailedLast.Count);
+        Logging.SaveLog("ProfileItemsFailedCurrent.Count    : " + ProfileItemsFailedCurrent.Count);
+        Logging.SaveLog("FailedProfileItemsThreeTimes.Count : " + FailedProfileItemsThreeTimes.Count);
 
         var oldCount = ProfileItems.Count;
 
-        SelectedProfiles = FailedTwiceProfileItems;
+        SelectedProfiles = FailedProfileItemsThreeTimes;
 
         var lstSelected = await GetProfileItems(true);
         if (lstSelected == null)
@@ -643,9 +648,10 @@ public class ProfilesViewModel : MyReactiveObject
             Reload();
         }
 
-        var temp = PreviousFailedProfileItems;
-        PreviousFailedProfileItems = CurrentFailedProfileItems;
-        CurrentFailedProfileItems = temp;
+        var temp = ProfileItemsFailedFirst;
+        ProfileItemsFailedFirst = ProfileItemsFailedLast;
+        ProfileItemsFailedLast = ProfileItemsFailedCurrent;
+        ProfileItemsFailedCurrent = temp;
 
         var newCount = ProfileItems.Count;
 

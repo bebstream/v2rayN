@@ -437,6 +437,7 @@ public class ProfilesViewModel : MyReactiveObject
             isInAutoSpeedTestRound = false;
 
             message = "AutoSpeedTest is enabled. Speed test running done.";
+            message += " Running duration : " + LastCallDuration;
             NoticeManager.Instance.SendMessage(message);
             Logging.SaveLog(message);
         }
@@ -490,37 +491,52 @@ public class ProfilesViewModel : MyReactiveObject
 
                 sw.Stop();
 
+                var LastTestDuration = $"{sw.Elapsed}".Substring(0, 8);
+                var message = "Last small round of test duration : " + LastTestDuration;
+
                 // 当 ProfileItems 数量少于 20 ，或者 速度大于 5 的数量少于 5，则更新订阅。如果不是，则重复 1 - 4 步骤。
                 isNeedUpdate = await IsNeedUpdate();
-                if (!isNeedUpdate)
+                if (!isNeedUpdate && IsAutoSpeedTestEnabled)
                 {
-                    var LastTestDuration = $"{sw.Elapsed}".Substring(0, 8);
-                    await SetAutoSpeedTestStatus("Last small round of test duration : " + LastTestDuration + "  Waiting for 2 minutes to run next small round of test.");
+                    message += "  Status is good, no need to update subscriptions, waiting for 5 minutes to run next small round of test.";
+                    await SetAutoSpeedTestStatus(message);
+                    Logging.SaveLog(message);
 
-                    Logging.SaveLog("Current small round of test running done with duration : " + LastTestDuration + ", status is good, no need to update subscriptions, waiting for 2 minutes to run next small round of test.");
-                    Thread.Sleep(1000 * 120);
+                    Thread.Sleep(1000 * 60 * 5);
                 }
-            } while (!isNeedUpdate);
+                else if (isNeedUpdate && IsAutoSpeedTestEnabled)
+                {
+                    Logging.SaveLog(message + "  Status is not good, going to update all subscriptions now.");
+                }
+                else
+                {
+                    Logging.SaveLog(message);
+                    Logging.SaveLog("AutoSpeedTest disabled manually. Stop the current samll round of test now.");
+                }
+            } while (!isNeedUpdate && IsAutoSpeedTestEnabled);
 
-            // 5. 更新全部订阅（通过代理）
-            await SetAutoSpeedTestStatus("Step 5 of 9 : Updating all subscriptions.");
-            await DoUpdateSubscription();
+            if (IsAutoSpeedTestEnabled)
+            {
+                // 5. 更新全部订阅（通过代理）
+                await SetAutoSpeedTestStatus("Step 5 of 9 : Updating all subscriptions.");
+                await DoUpdateSubscription();
 
-            // 6. 移除重复
-            await SetAutoSpeedTestStatus("Step 6 of 9 : Removing duplicated server.");
-            await DoRemoveDuplication();
+                // 6. 移除重复
+                await SetAutoSpeedTestStatus("Step 6 of 9 : Removing duplicated server.");
+                await DoRemoveDuplication();
 
-            // 7. 执行一键测试真连接延迟
-            await SetAutoSpeedTestStatus("Step 7 of 9 : Running delay test.");
-            await DoDelayTest();
+                // 7. 执行一键测试真连接延迟
+                await SetAutoSpeedTestStatus("Step 7 of 9 : Running delay test.");
+                await DoDelayTest();
 
-            // 8. 移除无效的 Server
-            await SetAutoSpeedTestStatus("Step 8 of 9 : Removing invalid servers.");
-            await DoRemoveInvalidByDelay();
+                // 8. 移除无效的 Server
+                await SetAutoSpeedTestStatus("Step 8 of 9 : Removing invalid servers.");
+                await DoRemoveInvalidByDelay();
 
-            // 9. 按延迟排序
-            await SetAutoSpeedTestStatus("Step 9 of 9 : Sorting by delay test result.");
-            await DoSortByDelay();
+                // 9. 按延迟排序
+                await SetAutoSpeedTestStatus("Step 9 of 9 : Sorting by delay test result.");
+                await DoSortByDelay();
+            }
         }
         catch (Exception ex)
         {
@@ -543,8 +559,11 @@ public class ProfilesViewModel : MyReactiveObject
         Logging.SaveLog("Wait 10 seconds...");
         Thread.Sleep(1000 * 10);
 
-        isSpeedTestRunning = true;
-        await ServerSpeedtest(ESpeedActionType.Mixedtest);
+        if (IsAutoSpeedTestEnabled)
+        {
+            isSpeedTestRunning = true;
+            await ServerSpeedtest(ESpeedActionType.Mixedtest);
+        }
 
         while (isSpeedTestRunning)
         {
@@ -558,9 +577,17 @@ public class ProfilesViewModel : MyReactiveObject
             Logging.SaveLog("SpeedtestingWait count before sleep : " + oldCount);
             Logging.SaveLog("SpeedtestingWait count  after sleep : " + newCount);
 
-            if (newCount <= 0 || newCount == oldCount)
+            if (newCount <= 0 || newCount == oldCount || IsAutoSpeedTestEnabled == false)
             {
-                Logging.SaveLog("Current round of speed test done or no speed test is running during the 1 minute. Stop the current round of speed test now.");
+                if (IsAutoSpeedTestEnabled == false)
+                {
+                    Logging.SaveLog("AutoSpeedTest disabled manually. Stop the current round of speed test now.");
+                }
+                else
+                {
+                    Logging.SaveLog("Current round of speed test done or no speed test is running during the 1 minute. Stop the current round of speed test now.");
+                }
+
                 isSpeedTestRunning = false;
                 ServerSpeedtestStop();
 
@@ -709,7 +736,7 @@ public class ProfilesViewModel : MyReactiveObject
             // Use the selected item's IndexId when setting default server to avoid reading SelectedProfile from a background thread
             await SetDefaultServer(selected.IndexId);
             Logging.SaveLog("Wait 1 second...");
-            Thread.Sleep(1000 * 1);
+            Thread.Sleep(1000 * 10);
         }
     }
 
@@ -783,8 +810,11 @@ public class ProfilesViewModel : MyReactiveObject
         Logging.SaveLog("Wait 10 seconds...");
         Thread.Sleep(1000 * 10);
 
-        isDelayTestRunning = true;
-        await ServerSpeedtest(ESpeedActionType.FastRealping);
+        if (IsAutoSpeedTestEnabled)
+        {
+            isDelayTestRunning = true;
+            await ServerSpeedtest(ESpeedActionType.FastRealping);
+        }
 
         while (isDelayTestRunning)
         {
@@ -798,9 +828,17 @@ public class ProfilesViewModel : MyReactiveObject
             Logging.SaveLog("Speedtesting count before sleep : " + oldCount);
             Logging.SaveLog("Speedtesting count  after sleep : " + newCount);
 
-            if (newCount <= 0 || newCount == oldCount)
+            if (newCount <= 0 || newCount == oldCount || IsAutoSpeedTestEnabled == false)
             {
-                Logging.SaveLog("Current round of delay test done or no delay test is running during the 1 minute. Stop the current round of delay test now.");
+                if (IsAutoSpeedTestEnabled == false)
+                {
+                    Logging.SaveLog("AutoSpeedTest disabled manually. Stop the current round of delay test now.");
+                }
+                else
+                {
+                    Logging.SaveLog("Current round of delay test done or no delay test is running during the 1 minute. Stop the current round of delay test now.");
+                }
+
                 isDelayTestRunning = false;
                 ServerSpeedtestStop();
 

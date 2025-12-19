@@ -486,7 +486,7 @@ public class ProfilesViewModel : MyReactiveObject
 
                 // 4. 选择最快服务器（特殊逻辑）
                 await SetAutoSpeedTestStatus("Step 4 of 9 : Setting active server.");
-                await DoSetServer();
+                await DoSetServerAfterSpeedTesting();
 
                 sw.Stop();
 
@@ -566,6 +566,10 @@ public class ProfilesViewModel : MyReactiveObject
 
                 Logging.SaveLog("Wait 10 seconds...");
                 Thread.Sleep(1000 * 10);
+            }
+            else
+            {
+                await DoSetServerWhileSpeedTesting();
             }
         }
 
@@ -657,14 +661,44 @@ public class ProfilesViewModel : MyReactiveObject
         Logging.SaveLog("DoSortBySpeed end.");
     }
 
-    private async Task DoSetServer()
+    private async Task DoSetServerWhileSpeedTesting()
     {
-        Logging.SaveLog("DoSetServer begin...");
+        Logging.SaveLog("DoSetServerWhileSpeedTesting begin...");
 
         if (ProfileItems != null && ProfileItems.Count > 0)
         {
-            var selected = (ProfileItems.FirstOrDefault(item => item.Delay is > 0 and < 500 && item.Speed > 1 && item.Remarks.IsNotEmpty() && (item.Remarks.ToLower().Contains("us") || item.Remarks.Contains("美国"))) ?? ProfileItems.FirstOrDefault(item => item.Delay < 500)) ?? ProfileItems[0];
+            var selected = ProfileItems.FirstOrDefault(item => item.Delay is > 0 and < 500 && item.Speed > 1 && item.Remarks.IsNotEmpty() && (item.Remarks.ToLower().Contains("us") || item.Remarks.Contains("美国")));
+            selected ??= ProfileItems.FirstOrDefault(item => item.Delay < 500 && item.Speed > 30);
+            selected ??= ProfileItems.FirstOrDefault(item => item.Delay < 500 && item.Speed > 10);
+            selected ??= ProfileItems.FirstOrDefault(item => item.Delay < 500 && item.Speed > 5);
+            selected ??= ProfileItems.FirstOrDefault(item => item.Delay < 500 && item.Speed > 1);
 
+            await DoSetServer(selected);
+        }
+
+        Logging.SaveLog("DoSetServerWhileSpeedTesting end.");
+    }
+
+    private async Task DoSetServerAfterSpeedTesting()
+    {
+        Logging.SaveLog("DoSetServerAfterSpeedTesting begin...");
+
+        if (ProfileItems != null && ProfileItems.Count > 0)
+        {
+            var selected = ProfileItems.FirstOrDefault(item => item.Delay is > 0 and < 500 && item.Speed > 1 && item.Remarks.IsNotEmpty() && (item.Remarks.ToLower().Contains("us") || item.Remarks.Contains("美国")));
+            selected ??= ProfileItems.FirstOrDefault(item => item.Delay < 500);
+            selected ??= ProfileItems[0];
+
+            await DoSetServer(selected);
+        }
+
+        Logging.SaveLog("DoSetServerAfterSpeedTesting end.");
+    }
+
+    private async Task DoSetServer(ProfileItemModel selected)
+    {
+        if (selected != null)
+        {
             // Assign SelectedProfile on the main/UI thread to avoid cross-thread access exceptions
             RxApp.MainThreadScheduler.Schedule(selected, (scheduler, model) =>
             {
@@ -674,12 +708,9 @@ public class ProfilesViewModel : MyReactiveObject
 
             // Use the selected item's IndexId when setting default server to avoid reading SelectedProfile from a background thread
             await SetDefaultServer(selected.IndexId);
-
-            Logging.SaveLog("Wait 10 seconds...");
-            Thread.Sleep(1000 * 10);
+            Logging.SaveLog("Wait 1 second...");
+            Thread.Sleep(1000 * 1);
         }
-
-        Logging.SaveLog("DoSetServer end.");
     }
 
     private async Task<bool> IsNeedUpdate()

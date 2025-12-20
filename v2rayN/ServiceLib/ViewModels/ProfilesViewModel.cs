@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Reactive.Disposables.Fluent;
@@ -504,7 +505,27 @@ public class ProfilesViewModel : MyReactiveObject
                     await SetAutoSpeedTestStatus(message);
                     Logging.SaveLog(message);
 
-                    Thread.Sleep(1000 * 60 * 5);
+                    var count = 0;
+                    while (IsAutoSpeedTestEnabled && count++ < 6 * 5)
+                    {
+                        if (count % 6 == 1)
+                        {
+                            Logging.SaveLog($"Wait 1 minute... (Iteration {((count - 1) / 6) + 1})");
+                        }
+
+                        // 将10秒拆分为10个1秒的等待，每秒检查一次条件
+                        for (var i = 0; i < 10; i++)
+                        {
+                            await Task.Delay(1000); // 每次只等1秒
+
+                            // 每秒检查一次，响应更及时
+                            if (!IsAutoSpeedTestEnabled)
+                            {
+                                Logging.SaveLog("AutoSpeedTest disabled manually. Exiting early.");
+                                break; // 立即退出
+                            }
+                        }
+                    }
                 }
                 else if (isNeedUpdate && IsAutoSpeedTestEnabled)
                 {
@@ -559,7 +580,7 @@ public class ProfilesViewModel : MyReactiveObject
         ServerSpeedtestStop();
 
         Logging.SaveLog("Wait 10 seconds...");
-        Thread.Sleep(1000 * 10);
+        await Task.Delay(1000 * 10);
 
         if (IsAutoSpeedTestEnabled)
         {
@@ -572,7 +593,25 @@ public class ProfilesViewModel : MyReactiveObject
             var oldCount = ProfileItems.Count(item => item.SpeedVal == ResUI.SpeedtestingWait);
 
             Logging.SaveLog("DoSpeedTest is running, waiting for 1 minute...");
-            Thread.Sleep(1000 * 60);
+
+            var count = 0;
+            while (IsAutoSpeedTestEnabled && count++ < 6)
+            {
+                Logging.SaveLog($"Wait 10 seconds... (Iteration {count})");
+
+                // 将10秒拆分为10个1秒的等待，每秒检查一次条件
+                for (var i = 0; i < 10; i++)
+                {
+                    await Task.Delay(1000); // 每次只等1秒
+
+                    // 每秒检查一次，响应更及时
+                    if (!IsAutoSpeedTestEnabled)
+                    {
+                        Logging.SaveLog("AutoSpeedTest disabled manually. Exiting early.");
+                        break; // 立即退出
+                    }
+                }
+            }
 
             var newCount = ProfileItems.Count(item => item.SpeedVal == ResUI.SpeedtestingWait);
 
@@ -594,7 +633,7 @@ public class ProfilesViewModel : MyReactiveObject
                 ServerSpeedtestStop();
 
                 Logging.SaveLog("Wait 10 seconds...");
-                Thread.Sleep(1000 * 10);
+                await Task.Delay(1000 * 10);
             }
             else
             {
@@ -610,48 +649,49 @@ public class ProfilesViewModel : MyReactiveObject
         Logging.SaveLog("DoRemoveInvalidBySpeed begin...");
 
         ProfileItemsFailedCurrent.Clear();
-        ProfileItemsFailedCurrent.AddRange<ProfileItemModel>(ProfileItems.Where(item =>   item.SpeedVal.IsNullOrEmpty() ||
-                                                                                        item.SpeedVal == ResUI.SpeedtestingSkip ||
-                                                                                        decimal.TryParse(item.SpeedVal, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var valueResult) == false
-                                                                             ).ToList());
+        ProfileItemsFailedCurrent.AddRange(ProfileItems.Where(item =>   item.SpeedVal.IsNullOrEmpty() ||
+                                                                        item.SpeedVal == ResUI.SpeedtestingSkip ||
+                                                                        decimal.TryParse(item.SpeedVal, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var valueResult) == false
+                                                             ).ToList());
 
-        var FailedProfileItemsTwoTimes = (IObservableCollection<ProfileItemModel>)ProfileItemsFailedCurrent.IntersectBy<ProfileItemModel, string>(ProfileItemsFailedLast.Select(it => it.IndexId), item => item.IndexId);
+        var intersectionTwoTimes = ProfileItemsFailedCurrent.IntersectBy<ProfileItemModel, string>(ProfileItemsFailedLast.Select(it => it.IndexId), item => item.IndexId);
 
-        var FailedProfileItemsThreeTimes = (IObservableCollection<ProfileItemModel>)FailedProfileItemsTwoTimes.IntersectBy<ProfileItemModel, string>(ProfileItemsFailedFirst.Select(it => it.IndexId), item => item.IndexId);
+        var intersectionThreeTimes = intersectionTwoTimes.IntersectBy<ProfileItemModel, string>(ProfileItemsFailedFirst.Select(it => it.IndexId), item => item.IndexId);
 
         Logging.SaveLog("ProfileItemsFailedFirst.Count      : " + ProfileItemsFailedFirst.Count);
         Logging.SaveLog("ProfileItemsFailedLast.Count       : " + ProfileItemsFailedLast.Count);
         Logging.SaveLog("ProfileItemsFailedCurrent.Count    : " + ProfileItemsFailedCurrent.Count);
-        Logging.SaveLog("FailedProfileItemsThreeTimes.Count : " + FailedProfileItemsThreeTimes.Count);
-
-        var oldCount = ProfileItems.Count;
-
-        SelectedProfiles = FailedProfileItemsThreeTimes;
-
-        var lstSelected = await GetProfileItems(true);
-        if (lstSelected == null)
-        {
-            return;
-        }
-
-        var exists = lstSelected.Exists(t => t.IndexId == _config.IndexId);
-
-        await ConfigHandler.RemoveServers(_config, lstSelected);
-        NoticeManager.Instance.Enqueue(ResUI.OperationSuccess);
-        if (lstSelected.Count == ProfileItems.Count)
-        {
-            ProfileItems.Clear();
-        }
-        await RefreshServers();
-        if (exists)
-        {
-            Reload();
-        }
+        Logging.SaveLog("ProfileItemsFailedThreeTimes.Count : " + intersectionThreeTimes.Count());
 
         var temp = ProfileItemsFailedFirst;
         ProfileItemsFailedFirst = ProfileItemsFailedLast;
         ProfileItemsFailedLast = ProfileItemsFailedCurrent;
         ProfileItemsFailedCurrent = temp;
+
+        var oldCount = ProfileItems.Count;
+
+        SelectedProfiles = intersectionThreeTimes.ToList();
+
+        var lstSelected = await GetProfileItems(true);
+        if (lstSelected != null && lstSelected.Count > 0)
+        {
+            var exists = lstSelected.Exists(t => t.IndexId == _config.IndexId);
+
+            await ConfigHandler.RemoveServers(_config, lstSelected);
+            NoticeManager.Instance.Enqueue(ResUI.OperationSuccess);
+            if (lstSelected.Count == ProfileItems.Count)
+            {
+                ProfileItems.Clear();
+            }
+            await RefreshServers();
+            if (exists)
+            {
+                Reload();
+            }
+        }
+
+        Logging.SaveLog("Wait 10 seconds...");
+        await Task.Delay(1000 * 10);
 
         var newCount = ProfileItems.Count;
 
@@ -668,7 +708,7 @@ public class ProfilesViewModel : MyReactiveObject
         await SortServer(EServerColName.SpeedVal.ToString());
 
         Logging.SaveLog("Wait 10 seconds...");
-        Thread.Sleep(1000 * 10);
+        await Task.Delay(1000 * 10);
 
         if (ProfileItems.Count > 1)
         {
@@ -687,7 +727,7 @@ public class ProfilesViewModel : MyReactiveObject
                 await SortServer(EServerColName.SpeedVal.ToString());
 
                 Logging.SaveLog("Wait 10 seconds...");
-                Thread.Sleep(1000 * 10);
+                await Task.Delay(1000 * 10);
             }
         }
 
@@ -741,16 +781,23 @@ public class ProfilesViewModel : MyReactiveObject
 
             // Use the selected item's IndexId when setting default server to avoid reading SelectedProfile from a background thread
             await SetDefaultServer(selected.IndexId);
-            Logging.SaveLog("Wait 1 second...");
-            Thread.Sleep(1000 * 10);
+            Logging.SaveLog("Wait 10 second...");
+            await Task.Delay(1000 * 10);
         }
     }
 
     private async Task<bool> IsNeedUpdate()
     {
         // ProfileItems 总数小于 20 或者 在 ProfileItems 里统计速度大于 5 的 server 的总数 小于 5
-        if (ProfileItems.Count < 20 || ProfileItems.Count(item => item.Delay is > 0 and < 500 && item.Speed > 5) < 5)
+        if (ProfileItems.Count < 20)
         {
+            Logging.SaveLog("ProfileItems.Count < 20");
+            return true;
+        }
+
+        if (ProfileItems.Count(item => item.Delay is > 0 and < 500 && item.Speed > 5) < 5)
+        {
+            Logging.SaveLog("Speed value bigger than 5 ProfileItems.Count < 5");
             return true;
         }
 
@@ -764,7 +811,7 @@ public class ProfilesViewModel : MyReactiveObject
         await Task.Run(async () => await SubscriptionHandler.UpdateProcess(_config, "", true, UpdateTaskHandler));
 
         Logging.SaveLog("Wait 10 seconds...");
-        Thread.Sleep(1000 * 10);
+        await Task.Delay(1000 * 10);
 
         Logging.SaveLog("DoUpdateSubscription end.");
     }
@@ -800,7 +847,7 @@ public class ProfilesViewModel : MyReactiveObject
         NoticeManager.Instance.Enqueue(string.Format(ResUI.RemoveDuplicateServerResult, tuple.Item1, tuple.Item2));
 
         Logging.SaveLog("Wait 10 seconds...");
-        Thread.Sleep(1000 * 10);
+        await Task.Delay(1000 * 10);
 
         Logging.SaveLog("DoRemoveDuplication end.");
     }
@@ -814,7 +861,7 @@ public class ProfilesViewModel : MyReactiveObject
         ServerSpeedtestStop();
 
         Logging.SaveLog("Wait 10 seconds...");
-        Thread.Sleep(1000 * 10);
+        await Task.Delay(1000 * 10);
 
         if (IsAutoSpeedTestEnabled)
         {
@@ -827,7 +874,25 @@ public class ProfilesViewModel : MyReactiveObject
             var oldCount = ProfileItems.Count(item => item.DelayVal == ResUI.Speedtesting);
 
             Logging.SaveLog("DoDelayTest is running, waiting for 1 minute...");
-            Thread.Sleep(1000 * 60);
+
+            var count = 0;
+            while (IsAutoSpeedTestEnabled && count++ < 6)
+            {
+                Logging.SaveLog($"Wait 10 seconds... (Iteration {count})");
+
+                // 将10秒拆分为10个1秒的等待，每秒检查一次条件
+                for (var i = 0; i < 10; i++)
+                {
+                    await Task.Delay(1000); // 每次只等1秒
+
+                    // 每秒检查一次，响应更及时
+                    if (!IsAutoSpeedTestEnabled)
+                    {
+                        Logging.SaveLog("AutoSpeedTest disabled manually. Exiting early.");
+                        break; // 立即退出
+                    }
+                }
+            }
 
             var newCount = ProfileItems.Count(item => item.DelayVal == ResUI.Speedtesting);
 
@@ -849,7 +914,7 @@ public class ProfilesViewModel : MyReactiveObject
                 ServerSpeedtestStop();
 
                 Logging.SaveLog("Wait 10 seconds...");
-                Thread.Sleep(1000 * 10);
+                await Task.Delay(1000 * 10);
             }
         }
 
@@ -863,7 +928,7 @@ public class ProfilesViewModel : MyReactiveObject
         await RemoveInvalidServerResult();
 
         Logging.SaveLog("Wait 10 seconds...");
-        Thread.Sleep(1000 * 10);
+        await Task.Delay(1000 * 10);
 
         Logging.SaveLog("DoRemoveInvalidByDelay end.");
     }
@@ -875,7 +940,7 @@ public class ProfilesViewModel : MyReactiveObject
         await SortServer(EServerColName.DelayVal.ToString());
 
         Logging.SaveLog("Wait 10 seconds...");
-        Thread.Sleep(1000 * 10);
+        await Task.Delay(1000 * 10);
 
         if (ProfileItems.Count > 1)
         {
@@ -894,7 +959,7 @@ public class ProfilesViewModel : MyReactiveObject
                 await SortServer(EServerColName.DelayVal.ToString());
 
                 Logging.SaveLog("Wait 10 seconds...");
-                Thread.Sleep(1000 * 10);
+                await Task.Delay(1000 * 10);
             }
         }
 

@@ -399,7 +399,7 @@ public class ProfilesViewModel : MyReactiveObject
             if (IsAutoSpeedTestEnabled == false)
             {
                 message = $"AutoSpeedTest is not enabled. Speed test will not run at this time.";
-                NoticeManager.Instance.SendMessage(message);
+                NoticeManager.Instance.SendMessageExAndEnqueue(message);
                 Logging.SaveLog(message);
 
                 await SetAutoSpeedTestStatus(message);
@@ -419,14 +419,14 @@ public class ProfilesViewModel : MyReactiveObject
                     message = "Timer triggered test on the top of hour while AutoSpeedTest is already running, ignore this trigger and waiting...";
                 }
 
-                NoticeManager.Instance.SendMessage(message);
+                NoticeManager.Instance.SendMessageExAndEnqueue(message);
                 Logging.SaveLog(message);
 
                 return;
             }
 
             message = "AutoSpeedTest is enabled. Speed test begin to run...";
-            NoticeManager.Instance.SendMessage(message);
+            NoticeManager.Instance.SendMessageExAndEnqueue(message);
             Logging.SaveLog(message);
 
             isInAutoSpeedTestRound = true;
@@ -451,7 +451,7 @@ public class ProfilesViewModel : MyReactiveObject
             }
 
             message += " Running duration : " + LastCallDuration;
-            NoticeManager.Instance.SendMessage(message);
+            NoticeManager.Instance.SendMessageExAndEnqueue(message);
             Logging.SaveLog(message);
         }
     }
@@ -492,7 +492,7 @@ public class ProfilesViewModel : MyReactiveObject
                 if (IsAutoSpeedTestEnabled == false)
                 {
                     message = "AutoSpeedTest disabled manually. Stop the current round of test now.";
-                    NoticeManager.Instance.SendMessage(message);
+                    NoticeManager.Instance.SendMessageExAndEnqueue(message);
                     Logging.SaveLog(message);
 
                     break; // 立即退出
@@ -504,7 +504,7 @@ public class ProfilesViewModel : MyReactiveObject
                 if (isNeedUpdate)
                 {
                     message += "  Status is not good, going to update all subscriptions now.";
-                    NoticeManager.Instance.SendMessage(message);
+                    NoticeManager.Instance.SendMessageExAndEnqueue(message);
                     Logging.SaveLog(message);
 
                     // 5. 更新全部订阅（通过代理）
@@ -530,7 +530,7 @@ public class ProfilesViewModel : MyReactiveObject
                 else
                 {
                     message += "  Status is good, no need to update subscriptions, waiting for 5 minutes to run next round of test.";
-                    NoticeManager.Instance.SendMessage(message);
+                    NoticeManager.Instance.SendMessageExAndEnqueue(message);
                     Logging.SaveLog(message);
 
                     await SetAutoSpeedTestStatus(message);
@@ -539,7 +539,7 @@ public class ProfilesViewModel : MyReactiveObject
                     while (IsAutoSpeedTestEnabled && count++ < 5)
                     {
                         message = $"Wait 1 minute... (Iteration {count})";
-                        NoticeManager.Instance.SendMessage(message);
+                        NoticeManager.Instance.SendMessageExAndEnqueue(message);
                         Logging.SaveLog(message);
 
                         await WaitForOneMinute();
@@ -657,7 +657,7 @@ public class ProfilesViewModel : MyReactiveObject
             var exists = lstSelected.Exists(t => t.IndexId == _config.IndexId);
 
             await ConfigHandler.RemoveServers(_config, lstSelected);
-            NoticeManager.Instance.Enqueue(ResUI.OperationSuccess);
+            NoticeManager.Instance.SendMessageExAndEnqueue(ResUI.OperationSuccess);
             if (lstSelected.Count == ProfileItems.Count)
             {
                 ProfileItems.Clear();
@@ -797,7 +797,7 @@ public class ProfilesViewModel : MyReactiveObject
 
     private async Task UpdateTaskHandler(bool success, string msg)
     {
-        NoticeManager.Instance.SendMessageEx(msg);
+        NoticeManager.Instance.SendMessageExAndEnqueue(msg);
         if (success)
         {
             var indexIdOld = _config.IndexId;
@@ -823,7 +823,7 @@ public class ProfilesViewModel : MyReactiveObject
             await RefreshServers();
             Reload();
         }
-        NoticeManager.Instance.Enqueue(string.Format(ResUI.RemoveDuplicateServerResult, tuple.Item1, tuple.Item2));
+        NoticeManager.Instance.SendMessageExAndEnqueue(string.Format(ResUI.RemoveDuplicateServerResult, tuple.Item1, tuple.Item2));
 
         Logging.SaveLog("Wait 2 seconds...");
         await Task.Delay(1000 * 2);
@@ -980,7 +980,7 @@ public class ProfilesViewModel : MyReactiveObject
                 if (IsAutoSpeedTestEnabled == false)
                 {
                     var message = "AutoSpeedTest disabled manually. Exiting early.";
-                    NoticeManager.Instance.SendMessage(message);
+                    NoticeManager.Instance.SendMessageExAndEnqueue(message);
                     Logging.SaveLog(message);
 
                     break; // 立即退出

@@ -33,9 +33,15 @@ public class NoticeManager
         SendMessage(content);
     }
 
-    public void SendMessageAndEnqueue(string? msg)
+    public void SendMessageAndEnqueue(string? content)
     {
-        Enqueue(msg);
-        SendMessage(msg);
+        Enqueue(content);
+        SendMessage(content);
+    }
+
+    public void SendMessageExAndEnqueue(string? content)
+    {
+        Enqueue(content);
+        SendMessage(content);
     }
 }

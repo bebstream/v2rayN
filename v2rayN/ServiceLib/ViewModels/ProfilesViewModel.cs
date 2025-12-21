@@ -100,7 +100,7 @@ public class ProfilesViewModel : MyReactiveObject
     // 是否有测延迟在运行中
     private bool isDelayTestRunning = false;
 
-    // 是否有测速在运行中
+    // 是否有测速度在运行中
     private bool isSpeedTestRunning = false;
 
     // 到下一个整点剩余时间
@@ -119,7 +119,7 @@ public class ProfilesViewModel : MyReactiveObject
         set => this.RaiseAndSetIfChanged(ref _lastCallDuration, value);
     }
 
-    // 自动测速状态
+    // 自动测速状态显示
     private string _autoSpeedTestStatus;
     public string AutoSpeedTestStatus
     {
@@ -387,26 +387,27 @@ public class ProfilesViewModel : MyReactiveObject
     }
 
     // ---------------------------------------------------------
-    // 3) 检测是否到整点，是整点就启动测试
+    // 3) 检测是否到整点，是整点就启动自动测速
     // ---------------------------------------------------------
     private async Task TriggerOnTheTopOfHour(bool isTriggeredManually)
     {
-        string message;
-
-        if (IsAutoSpeedTestEnabled == false)
-        {
-            message = $"AutoSpeedTest is not enabled. Speed test will not run at this time.";
-            NoticeManager.Instance.SendMessage(message);
-            Logging.SaveLog(message);
-
-            await SetAutoSpeedTestStatus(message);
-
-            return;
-        }
-
         if ((DateTime.Now.Minute == 0 && DateTime.Now.Second == 0) || (isTriggeredManually == true))    // Triggered by timer on the top of hour or triggered by manually hitting the button
         {
-            // 防止在运行自动测试的过程中，被再次触发
+            string message;
+
+            // 首先检查自动测速功能是否启用
+            if (IsAutoSpeedTestEnabled == false)
+            {
+                message = $"AutoSpeedTest is not enabled. Speed test will not run at this time.";
+                NoticeManager.Instance.SendMessage(message);
+                Logging.SaveLog(message);
+
+                await SetAutoSpeedTestStatus(message);
+
+                return;
+            }
+
+            // 防止在运行自动测速的过程中，被再次触发
             if (isInAutoSpeedTestRound)
             {
                 if (isTriggeredManually)
@@ -453,24 +454,6 @@ public class ProfilesViewModel : MyReactiveObject
             NoticeManager.Instance.SendMessage(message);
             Logging.SaveLog(message);
         }
-        else // 非整点时间，timer 每秒触发的事件
-        {
-            // 如果正有自动测速在运行中
-            if (isInAutoSpeedTestRound)
-            {
-                // Do nothing
-                return;
-            }
-            else
-            {
-                if (LastCallDuration.IsNullOrEmpty())
-                {
-                    LastCallDuration = "Have not run yet";
-                }
-
-                await SetAutoSpeedTestStatus($"Last running duration : {LastCallDuration} , next running will begin in : {TimeToNextHour}");
-            }
-        }
     }
 
     // ---------------------------------------------------------
@@ -480,8 +463,7 @@ public class ProfilesViewModel : MyReactiveObject
     {
         try
         {
-            var isNeedUpdate = false;
-            do
+            while (IsAutoSpeedTestEnabled)
             {
                 var sw = Stopwatch.StartNew();
 
@@ -506,64 +488,64 @@ public class ProfilesViewModel : MyReactiveObject
                 var LastTestDuration = $"{sw.Elapsed}".Substring(0, 8);
                 var message = "Last round of test duration : " + LastTestDuration;
 
-                if (IsAutoSpeedTestEnabled)
+                // 半路检查是否停止自动测速
+                if (IsAutoSpeedTestEnabled == false)
                 {
-                    // 当 ProfileItems 数量少于 20 ，或者 速度大于 5 的数量少于 5，则更新订阅。如果不是，则重复 1 - 4 步骤。
-                    isNeedUpdate = await IsNeedUpdate();
+                    message = "AutoSpeedTest disabled manually. Stop the current round of test now.";
+                    NoticeManager.Instance.SendMessage(message);
+                    Logging.SaveLog(message);
 
-                    if (isNeedUpdate)
-                    {
-                        message += "  Status is not good, going to update all subscriptions now.";
-                        NoticeManager.Instance.SendMessage(message);
-                        Logging.SaveLog(message);
+                    break; // 立即退出
+                }
 
-                        // 5. 更新全部订阅（通过代理）
-                        await SetAutoSpeedTestStatus("Step 5 of 9 : Updating all subscriptions.");
-                        await DoUpdateSubscription();
+                // 当 ProfileItems 数量少于 20 ，或者 速度大于 5 的数量少于 5，则更新订阅，进行 delay 测试。如果不是，则等待 5 分钟后重复 1 - 4 步骤。
+                var isNeedUpdate = await IsNeedUpdate();
 
-                        // 6. 移除重复
-                        await SetAutoSpeedTestStatus("Step 6 of 9 : Removing duplicated server.");
-                        await DoRemoveDuplication();
+                if (isNeedUpdate)
+                {
+                    message += "  Status is not good, going to update all subscriptions now.";
+                    NoticeManager.Instance.SendMessage(message);
+                    Logging.SaveLog(message);
 
-                        // 7. 执行一键测试真连接延迟
-                        await SetAutoSpeedTestStatus("Step 7 of 9 : Running delay test.");
-                        await DoDelayTest();
+                    // 5. 更新全部订阅（通过代理）
+                    await SetAutoSpeedTestStatus("Step 5 of 9 : Updating all subscriptions.");
+                    await DoUpdateSubscription();
 
-                        // 8. 移除无效的 Server
-                        await SetAutoSpeedTestStatus("Step 8 of 9 : Removing invalid servers.");
-                        await DoRemoveInvalidByDelay();
+                    // 6. 移除重复
+                    await SetAutoSpeedTestStatus("Step 6 of 9 : Removing duplicated server.");
+                    await DoRemoveDuplication();
 
-                        // 9. 按延迟排序
-                        await SetAutoSpeedTestStatus("Step 9 of 9 : Sorting by delay test result.");
-                        await DoSortByDelay();
-                    }
-                    else
-                    {
-                        message += "  Status is good, no need to update subscriptions, waiting for 5 minutes to run next round of test.";
-                        NoticeManager.Instance.SendMessage(message);
-                        Logging.SaveLog(message);
+                    // 7. 执行一键测试真连接延迟
+                    await SetAutoSpeedTestStatus("Step 7 of 9 : Running delay test.");
+                    await DoDelayTest();
 
-                        await SetAutoSpeedTestStatus(message);
+                    // 8. 移除无效的 Server
+                    await SetAutoSpeedTestStatus("Step 8 of 9 : Removing invalid servers.");
+                    await DoRemoveInvalidByDelay();
 
-                        var count = 0;
-                        while (IsAutoSpeedTestEnabled && count++ < 5)
-                        {
-                            message = $"Wait 1 minute... (Iteration {count})";
-                            NoticeManager.Instance.SendMessage(message);
-                            Logging.SaveLog(message);
-
-                            await WaitForOneMinute();
-                        }
-                    }
+                    // 9. 按延迟排序
+                    await SetAutoSpeedTestStatus("Step 9 of 9 : Sorting by delay test result.");
+                    await DoSortByDelay();
                 }
                 else
                 {
-                    message += "  AutoSpeedTest disabled manually. Stop the current round of test now.";
+                    message += "  Status is good, no need to update subscriptions, waiting for 5 minutes to run next round of test.";
                     NoticeManager.Instance.SendMessage(message);
                     Logging.SaveLog(message);
-                }
-            } while (IsAutoSpeedTestEnabled && isNeedUpdate == false);
 
+                    await SetAutoSpeedTestStatus(message);
+
+                    var count = 0;
+                    while (IsAutoSpeedTestEnabled && count++ < 5)
+                    {
+                        message = $"Wait 1 minute... (Iteration {count})";
+                        NoticeManager.Instance.SendMessage(message);
+                        Logging.SaveLog(message);
+
+                        await WaitForOneMinute();
+                    }
+                }
+            }
         }
         catch (Exception ex)
         {

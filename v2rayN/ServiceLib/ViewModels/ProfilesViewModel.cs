@@ -889,6 +889,9 @@ public class ProfilesViewModel : MyReactiveObject
     {
         Logging.SaveLog("DoRemoveInvalidByDelay begin...");
 
+        // 把无效配置的 Server （它们的 delay value 显示为空白）的 delay 设置为 -1 ，等待着和有效配置但是 delay 测试无效的 Server 一起移除掉。
+        ProfileItems.Where(item => item.DelayVal.IsNullOrEmpty()).ToList().ForEach(item => ProfileExManager.Instance.SetTestDelay(item.IndexId, -1));
+
         var oldCount = ProfileItems.Count;
 
         await RemoveInvalidServerResult();

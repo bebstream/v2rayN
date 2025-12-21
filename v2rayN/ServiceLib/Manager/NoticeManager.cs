@@ -42,6 +42,6 @@ public class NoticeManager
     public void SendMessageExAndEnqueue(string? content)
     {
         Enqueue(content);
-        SendMessage(content);
+        SendMessageEx(content);
     }
 }

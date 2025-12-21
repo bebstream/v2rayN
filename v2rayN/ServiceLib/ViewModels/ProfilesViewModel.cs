@@ -103,12 +103,12 @@ public class ProfilesViewModel : MyReactiveObject
     // 是否有测速在运行中
     private bool isSpeedTestRunning = false;
 
-    // 到下一个双数整点剩余时间
-    private string _timeToNextEvenHour;
-    public string TimeToNextEvenHour
+    // 到下一个整点剩余时间
+    private string _timeToNextHour;
+    public string TimeToNextHour
     {
-        get => _timeToNextEvenHour;
-        set => this.RaiseAndSetIfChanged(ref _timeToNextEvenHour, value);
+        get => _timeToNextHour;
+        set => this.RaiseAndSetIfChanged(ref _timeToNextHour, value);
     }
 
     // 函数执行耗时
@@ -243,11 +243,11 @@ public class ProfilesViewModel : MyReactiveObject
             {
                 try
                 {
-                    await CheckEvenHourTrigger(true);
+                    await TriggerOnTheTopOfHour(true);
                 }
                 catch (Exception ex)
                 {
-                    Logging.SaveLog("CheckEvenHourTrigger failed : " + ex.ToString());
+                    Logging.SaveLog("TriggerOnTheTopOfHour failed : " + ex.ToString());
                 }
             });
         });
@@ -364,66 +364,67 @@ public class ProfilesViewModel : MyReactiveObject
             .ObserveOn(RxApp.MainThreadScheduler)
             .Subscribe(_ =>
             {
-                TimeToNextEvenHour = GetTimeToNextEvenHour();
+                TimeToNextHour = GetTimeToNextHour();
             })
             .DisposeWith(_disposables);
 
-        // 每秒检测是否到双数整点（不是整点不会触发）
+        // 每秒检测是否到整点（不是整点不会触发）
         Observable.Interval(TimeSpan.FromSeconds(1))
-            .Subscribe(async _ => await CheckEvenHourTrigger(false))
+            .Subscribe(async _ => await TriggerOnTheTopOfHour(false))
             .DisposeWith(_disposables);
     }
 
     // ---------------------------------------------------------
-    // 2) 计算“距离下一个双数整点”的时间
+    // 2) 计算“距离下一个整点”的时间
     // ---------------------------------------------------------
-    private static string GetTimeToNextEvenHour()
+    private static string GetTimeToNextHour()
     {
         var now = DateTime.Now;
+        var nextHour = new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0).AddHours(1);
 
-        var nextEvenHour = (now.Hour % 2 == 0) ? now.Hour + 2 : now.Hour + 1;
-        if (nextEvenHour >= 24)
-        {
-            nextEvenHour -= 24;
-        }
-
-        var nextTime = new DateTime(now.Year, now.Month, now.Day, nextEvenHour, 0, 0);
-        if (nextTime <= now)
-        {
-            nextTime = nextTime.AddHours(24);
-        }
-
-        var remaining = nextTime - now;
-
-        return $"{remaining.Hours:D2}:{remaining.Minutes:D2}:{remaining.Seconds:D2}";
+        // 格式化为 HH:mm:ss（总是显示两位小时数，即使小于10小时）
+        return (nextHour - now).ToString(@"hh\:mm\:ss");
     }
 
     // ---------------------------------------------------------
-    // 3) 检测是否到双数整点
+    // 3) 检测是否到整点，是整点就启动测试
     // ---------------------------------------------------------
-    private async Task CheckEvenHourTrigger(bool isTriggeredManually)
+    private async Task TriggerOnTheTopOfHour(bool isTriggeredManually)
     {
+        string message;
+
         if (IsAutoSpeedTestEnabled == false)
         {
-            await SetAutoSpeedTestStatus($"AutoSpeedTest is not enabled. Speed test will not run.");
+            message = $"AutoSpeedTest is not enabled. Speed test will not run at this time.";
+            NoticeManager.Instance.SendMessage(message);
+            Logging.SaveLog(message);
+
+            await SetAutoSpeedTestStatus(message);
 
             return;
         }
 
-        var now = DateTime.Now;
-        if ((now.Minute == 0 && now.Hour % 2 == 0) || (isTriggeredManually == true))    // Triggered by timer at even hour or triggered by manually hitting the button
+        if ((DateTime.Now.Minute == 0 && DateTime.Now.Second == 0) || (isTriggeredManually == true))    // Triggered by timer on the top of hour or triggered by manually hitting the button
         {
             // 防止在运行自动测试的过程中，被再次触发
             if (isInAutoSpeedTestRound)
             {
-                var msg = "AutoSpeedTest is running, waiting...";
-                NoticeManager.Instance.SendMessage(msg);
-                Logging.SaveLog(msg);
+                if (isTriggeredManually)
+                {
+                    message = "Manually triggered test while AutoSpeedTest is already running, ignore this trigger and waiting...";
+                }
+                else
+                {
+                    message = "Timer triggered test on the top of hour while AutoSpeedTest is already running, ignore this trigger and waiting...";
+                }
+
+                NoticeManager.Instance.SendMessage(message);
+                Logging.SaveLog(message);
 
                 return;
             }
 
-            var message = "AutoSpeedTest is enabled. Speed test begin to run...";
+            message = "AutoSpeedTest is enabled. Speed test begin to run...";
             NoticeManager.Instance.SendMessage(message);
             Logging.SaveLog(message);
 
@@ -439,12 +440,20 @@ public class ProfilesViewModel : MyReactiveObject
 
             isInAutoSpeedTestRound = false;
 
-            message = "AutoSpeedTest is enabled. Speed test running done.";
+            if (IsAutoSpeedTestEnabled)
+            {
+                message = "AutoSpeedTest is enabled. Speed test running done.";
+            }
+            else
+            {
+                message = "AutoSpeedTest was enabled, but been disabled while test running. This round of test been interrupted.";
+            }
+
             message += " Running duration : " + LastCallDuration;
             NoticeManager.Instance.SendMessage(message);
             Logging.SaveLog(message);
         }
-        else // 非偶数整点时间，timer 每秒触发的事件
+        else // 非整点时间，timer 每秒触发的事件
         {
             // 如果正有自动测速在运行中
             if (isInAutoSpeedTestRound)
@@ -459,7 +468,7 @@ public class ProfilesViewModel : MyReactiveObject
                     LastCallDuration = "Have not run yet";
                 }
 
-                await SetAutoSpeedTestStatus($"Last running duration : {LastCallDuration} , next running will begin in : {TimeToNextEvenHour}");
+                await SetAutoSpeedTestStatus($"Last running duration : {LastCallDuration} , next running will begin in : {TimeToNextHour}");
             }
         }
     }
@@ -471,7 +480,7 @@ public class ProfilesViewModel : MyReactiveObject
     {
         try
         {
-            bool isNeedUpdate;
+            var isNeedUpdate = false;
             do
             {
                 var sw = Stopwatch.StartNew();
@@ -495,71 +504,66 @@ public class ProfilesViewModel : MyReactiveObject
                 sw.Stop();
 
                 var LastTestDuration = $"{sw.Elapsed}".Substring(0, 8);
-                var message = "Last small round of test duration : " + LastTestDuration;
+                var message = "Last round of test duration : " + LastTestDuration;
 
-                // 当 ProfileItems 数量少于 20 ，或者 速度大于 5 的数量少于 5，则更新订阅。如果不是，则重复 1 - 4 步骤。
-                isNeedUpdate = await IsNeedUpdate();
-                if (!isNeedUpdate && IsAutoSpeedTestEnabled)
+                if (IsAutoSpeedTestEnabled)
                 {
-                    message += "  Status is good, no need to update subscriptions, waiting for 5 minutes to run next small round of test.";
-                    await SetAutoSpeedTestStatus(message);
-                    Logging.SaveLog(message);
+                    // 当 ProfileItems 数量少于 20 ，或者 速度大于 5 的数量少于 5，则更新订阅。如果不是，则重复 1 - 4 步骤。
+                    isNeedUpdate = await IsNeedUpdate();
 
-                    var count = 0;
-                    while (IsAutoSpeedTestEnabled && count++ < 6 * 5)
+                    if (isNeedUpdate)
                     {
-                        if (count % 6 == 1)
-                        {
-                            Logging.SaveLog($"Wait 1 minute... (Iteration {((count - 1) / 6) + 1})");
-                        }
+                        message += "  Status is not good, going to update all subscriptions now.";
+                        NoticeManager.Instance.SendMessage(message);
+                        Logging.SaveLog(message);
 
-                        // 将10秒拆分为10个1秒的等待，每秒检查一次条件
-                        for (var i = 0; i < 10; i++)
-                        {
-                            await Task.Delay(1000); // 每次只等1秒
+                        // 5. 更新全部订阅（通过代理）
+                        await SetAutoSpeedTestStatus("Step 5 of 9 : Updating all subscriptions.");
+                        await DoUpdateSubscription();
 
-                            // 每秒检查一次，响应更及时
-                            if (!IsAutoSpeedTestEnabled)
-                            {
-                                Logging.SaveLog("AutoSpeedTest disabled manually. Exiting early.");
-                                break; // 立即退出
-                            }
+                        // 6. 移除重复
+                        await SetAutoSpeedTestStatus("Step 6 of 9 : Removing duplicated server.");
+                        await DoRemoveDuplication();
+
+                        // 7. 执行一键测试真连接延迟
+                        await SetAutoSpeedTestStatus("Step 7 of 9 : Running delay test.");
+                        await DoDelayTest();
+
+                        // 8. 移除无效的 Server
+                        await SetAutoSpeedTestStatus("Step 8 of 9 : Removing invalid servers.");
+                        await DoRemoveInvalidByDelay();
+
+                        // 9. 按延迟排序
+                        await SetAutoSpeedTestStatus("Step 9 of 9 : Sorting by delay test result.");
+                        await DoSortByDelay();
+                    }
+                    else
+                    {
+                        message += "  Status is good, no need to update subscriptions, waiting for 5 minutes to run next round of test.";
+                        NoticeManager.Instance.SendMessage(message);
+                        Logging.SaveLog(message);
+
+                        await SetAutoSpeedTestStatus(message);
+
+                        var count = 0;
+                        while (IsAutoSpeedTestEnabled && count++ < 5)
+                        {
+                            message = $"Wait 1 minute... (Iteration {count})";
+                            NoticeManager.Instance.SendMessage(message);
+                            Logging.SaveLog(message);
+
+                            await WaitForOneMinute();
                         }
                     }
                 }
-                else if (isNeedUpdate && IsAutoSpeedTestEnabled)
-                {
-                    Logging.SaveLog(message + "  Status is not good, going to update all subscriptions now.");
-                }
                 else
                 {
+                    message += "  AutoSpeedTest disabled manually. Stop the current round of test now.";
+                    NoticeManager.Instance.SendMessage(message);
                     Logging.SaveLog(message);
-                    Logging.SaveLog("AutoSpeedTest disabled manually. Stop the current samll round of test now.");
                 }
-            } while (!isNeedUpdate && IsAutoSpeedTestEnabled);
+            } while (IsAutoSpeedTestEnabled && isNeedUpdate == false);
 
-            if (IsAutoSpeedTestEnabled)
-            {
-                // 5. 更新全部订阅（通过代理）
-                await SetAutoSpeedTestStatus("Step 5 of 9 : Updating all subscriptions.");
-                await DoUpdateSubscription();
-
-                // 6. 移除重复
-                await SetAutoSpeedTestStatus("Step 6 of 9 : Removing duplicated server.");
-                await DoRemoveDuplication();
-
-                // 7. 执行一键测试真连接延迟
-                await SetAutoSpeedTestStatus("Step 7 of 9 : Running delay test.");
-                await DoDelayTest();
-
-                // 8. 移除无效的 Server
-                await SetAutoSpeedTestStatus("Step 8 of 9 : Removing invalid servers.");
-                await DoRemoveInvalidByDelay();
-
-                // 9. 按延迟排序
-                await SetAutoSpeedTestStatus("Step 9 of 9 : Sorting by delay test result.");
-                await DoSortByDelay();
-            }
         }
         catch (Exception ex)
         {
@@ -569,6 +573,14 @@ public class ProfilesViewModel : MyReactiveObject
         await Task.CompletedTask;
 
         return Unit.Default;
+    }
+
+    // ---------------------------------------------------------
+    // 5) 释放资源
+    // ---------------------------------------------------------
+    public void Dispose()
+    {
+        _disposables.Dispose();
     }
 
     private async Task DoSpeedTest()
@@ -594,24 +606,7 @@ public class ProfilesViewModel : MyReactiveObject
 
             Logging.SaveLog("DoSpeedTest is running, waiting for 1 minute...");
 
-            var count = 0;
-            while (IsAutoSpeedTestEnabled && count++ < 6)
-            {
-                Logging.SaveLog($"Wait 10 seconds... (Iteration {count})");
-
-                // 将10秒拆分为10个1秒的等待，每秒检查一次条件
-                for (var i = 0; i < 10; i++)
-                {
-                    await Task.Delay(1000); // 每次只等1秒
-
-                    // 每秒检查一次，响应更及时
-                    if (!IsAutoSpeedTestEnabled)
-                    {
-                        Logging.SaveLog("AutoSpeedTest disabled manually. Exiting early.");
-                        break; // 立即退出
-                    }
-                }
-            }
+            await WaitForOneMinute();
 
             var newCount = ProfileItems.Count(item => item.SpeedVal == ResUI.SpeedtestingWait);
 
@@ -620,14 +615,16 @@ public class ProfilesViewModel : MyReactiveObject
 
             if (newCount <= 0 || newCount == oldCount || IsAutoSpeedTestEnabled == false)
             {
-                if (IsAutoSpeedTestEnabled == false)
+                string message;
+                if (IsAutoSpeedTestEnabled)
                 {
-                    Logging.SaveLog("AutoSpeedTest disabled manually. Stop the current round of speed test now.");
+                    message = "Current round of speed test done or no speed test is running during the 1 minute. Stop the current round of speed test now.";
                 }
                 else
                 {
-                    Logging.SaveLog("Current round of speed test done or no speed test is running during the 1 minute. Stop the current round of speed test now.");
+                    message = "AutoSpeedTest disabled manually. Stop the current round of speed test now.";
                 }
+                Logging.SaveLog(message);
 
                 isSpeedTestRunning = false;
                 ServerSpeedtestStop();
@@ -695,8 +692,8 @@ public class ProfilesViewModel : MyReactiveObject
 
         var newCount = ProfileItems.Count;
 
-        Logging.SaveLog("ProfileItems.Count before invalid removing : " + oldCount);
-        Logging.SaveLog("ProfileItems.Count  after invalid removing : " + newCount);
+        Logging.SaveLog("ProfileItems.Count before invalid removing by speed : " + oldCount);
+        Logging.SaveLog("ProfileItems.Count  after invalid removing by speed : " + newCount);
 
         Logging.SaveLog("DoRemoveInvalidBySpeed end.");
     }
@@ -707,8 +704,8 @@ public class ProfilesViewModel : MyReactiveObject
 
         await SortServer(EServerColName.SpeedVal.ToString());
 
-        Logging.SaveLog("Wait 10 seconds...");
-        await Task.Delay(1000 * 10);
+        Logging.SaveLog("Wait 2 seconds...");
+        await Task.Delay(1000 * 2);
 
         if (ProfileItems.Count > 1)
         {
@@ -726,8 +723,8 @@ public class ProfilesViewModel : MyReactiveObject
             {
                 await SortServer(EServerColName.SpeedVal.ToString());
 
-                Logging.SaveLog("Wait 10 seconds...");
-                await Task.Delay(1000 * 10);
+                Logging.SaveLog("Wait 2 seconds...");
+                await Task.Delay(1000 * 2);
             }
         }
 
@@ -781,8 +778,8 @@ public class ProfilesViewModel : MyReactiveObject
 
             // Use the selected item's IndexId when setting default server to avoid reading SelectedProfile from a background thread
             await SetDefaultServer(selected.IndexId);
-            Logging.SaveLog("Wait 10 second...");
-            await Task.Delay(1000 * 10);
+            Logging.SaveLog("Wait 2 second...");
+            await Task.Delay(1000 * 2);
         }
     }
 
@@ -791,13 +788,13 @@ public class ProfilesViewModel : MyReactiveObject
         // ProfileItems 总数小于 20 或者 在 ProfileItems 里统计速度大于 5 的 server 的总数 小于 5
         if (ProfileItems.Count < 20)
         {
-            Logging.SaveLog("ProfileItems.Count < 20");
+            Logging.SaveLog("ProfileItems.Count < 20 , need to update subscription.");
             return true;
         }
 
         if (ProfileItems.Count(item => item.Delay is > 0 and < 500 && item.Speed > 5) < 5)
         {
-            Logging.SaveLog("Speed value bigger than 5 ProfileItems.Count < 5");
+            Logging.SaveLog("Speed value bigger than 5 ProfileItems.Count < 5 , need to update subscription.");
             return true;
         }
 
@@ -810,8 +807,8 @@ public class ProfilesViewModel : MyReactiveObject
 
         await Task.Run(async () => await SubscriptionHandler.UpdateProcess(_config, "", true, UpdateTaskHandler));
 
-        Logging.SaveLog("Wait 10 seconds...");
-        await Task.Delay(1000 * 10);
+        Logging.SaveLog("Wait 2 seconds...");
+        await Task.Delay(1000 * 2);
 
         Logging.SaveLog("DoUpdateSubscription end.");
     }
@@ -846,8 +843,8 @@ public class ProfilesViewModel : MyReactiveObject
         }
         NoticeManager.Instance.Enqueue(string.Format(ResUI.RemoveDuplicateServerResult, tuple.Item1, tuple.Item2));
 
-        Logging.SaveLog("Wait 10 seconds...");
-        await Task.Delay(1000 * 10);
+        Logging.SaveLog("Wait 2 seconds...");
+        await Task.Delay(1000 * 2);
 
         Logging.SaveLog("DoRemoveDuplication end.");
     }
@@ -875,24 +872,7 @@ public class ProfilesViewModel : MyReactiveObject
 
             Logging.SaveLog("DoDelayTest is running, waiting for 1 minute...");
 
-            var count = 0;
-            while (IsAutoSpeedTestEnabled && count++ < 6)
-            {
-                Logging.SaveLog($"Wait 10 seconds... (Iteration {count})");
-
-                // 将10秒拆分为10个1秒的等待，每秒检查一次条件
-                for (var i = 0; i < 10; i++)
-                {
-                    await Task.Delay(1000); // 每次只等1秒
-
-                    // 每秒检查一次，响应更及时
-                    if (!IsAutoSpeedTestEnabled)
-                    {
-                        Logging.SaveLog("AutoSpeedTest disabled manually. Exiting early.");
-                        break; // 立即退出
-                    }
-                }
-            }
+            await WaitForOneMinute();
 
             var newCount = ProfileItems.Count(item => item.DelayVal == ResUI.Speedtesting);
 
@@ -901,14 +881,16 @@ public class ProfilesViewModel : MyReactiveObject
 
             if (newCount <= 0 || newCount == oldCount || IsAutoSpeedTestEnabled == false)
             {
-                if (IsAutoSpeedTestEnabled == false)
+                string message;
+                if (IsAutoSpeedTestEnabled)
                 {
-                    Logging.SaveLog("AutoSpeedTest disabled manually. Stop the current round of delay test now.");
+                    message = "Current round of delay test done or no delay test is running during the 1 minute. Stop the current round of delay test now.";
                 }
                 else
                 {
-                    Logging.SaveLog("Current round of delay test done or no delay test is running during the 1 minute. Stop the current round of delay test now.");
+                    message = "AutoSpeedTest disabled manually. Stop the current round of delay test now.";
                 }
+                Logging.SaveLog(message);
 
                 isDelayTestRunning = false;
                 ServerSpeedtestStop();
@@ -925,10 +907,17 @@ public class ProfilesViewModel : MyReactiveObject
     {
         Logging.SaveLog("DoRemoveInvalidByDelay begin...");
 
+        var oldCount = ProfileItems.Count;
+
         await RemoveInvalidServerResult();
 
         Logging.SaveLog("Wait 10 seconds...");
         await Task.Delay(1000 * 10);
+
+        var newCount = ProfileItems.Count;
+
+        Logging.SaveLog("ProfileItems.Count before invalid removing by delay : " + oldCount);
+        Logging.SaveLog("ProfileItems.Count  after invalid removing by delay : " + newCount);
 
         Logging.SaveLog("DoRemoveInvalidByDelay end.");
     }
@@ -939,8 +928,8 @@ public class ProfilesViewModel : MyReactiveObject
 
         await SortServer(EServerColName.DelayVal.ToString());
 
-        Logging.SaveLog("Wait 10 seconds...");
-        await Task.Delay(1000 * 10);
+        Logging.SaveLog("Wait 2 seconds...");
+        await Task.Delay(1000 * 2);
 
         if (ProfileItems.Count > 1)
         {
@@ -958,8 +947,8 @@ public class ProfilesViewModel : MyReactiveObject
             {
                 await SortServer(EServerColName.DelayVal.ToString());
 
-                Logging.SaveLog("Wait 10 seconds...");
-                await Task.Delay(1000 * 10);
+                Logging.SaveLog("Wait 2 seconds...");
+                await Task.Delay(1000 * 2);
             }
         }
 
@@ -990,12 +979,29 @@ public class ProfilesViewModel : MyReactiveObject
         await Task.CompletedTask;
     }
 
-    // ---------------------------------------------------------
-    // 5) 释放资源
-    // ---------------------------------------------------------
-    public void Dispose()
+    private async Task WaitForOneMinute()
     {
-        _disposables.Dispose();
+        var count = 0;
+        while (IsAutoSpeedTestEnabled && count++ < 6)
+        {
+            Logging.SaveLog($"Wait 10 seconds... (Iteration {count})");
+
+            // 将10秒拆分为10个1秒的等待，每秒检查一次条件
+            for (var i = 0; i < 10; i++)
+            {
+                await Task.Delay(1000); // 每次只等1秒
+
+                // 每秒检查一次，响应更及时
+                if (IsAutoSpeedTestEnabled == false)
+                {
+                    var message = "AutoSpeedTest disabled manually. Exiting early.";
+                    NoticeManager.Instance.SendMessage(message);
+                    Logging.SaveLog(message);
+
+                    break; // 立即退出
+                }
+            }
+        }
     }
     #region Actions
 

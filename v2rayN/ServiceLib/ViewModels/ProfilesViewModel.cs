@@ -536,10 +536,10 @@ public class ProfilesViewModel : MyReactiveObject
                 else
                 {
                     // 休息等待 5 分钟
-                    message += $"  Status is good, no need to update subscriptions, waiting for 5 minutes to run loop test of the top {currentItemLoopCount} servers.";
-                    SaveLogAndSendMessageEx(message);
-                    await SetAutoSpeedTestStatus(message);
-                    await WaitForFiveMinutes();
+                    //message += $"  Status is good, no need to update subscriptions, waiting for 5 minutes to run loop test of the top {currentItemLoopCount} servers.";
+                    //SaveLogAndSendMessageEx(message);
+                    //await SetAutoSpeedTestStatus(message);
+                    //await WaitForFiveMinutes();
 
                     // 10. 循环测试最快的 10 个 Server
                     await SetAutoSpeedTestStatus($"Step 10 of 10 : Loop test of the top {currentItemLoopCount} servers.");

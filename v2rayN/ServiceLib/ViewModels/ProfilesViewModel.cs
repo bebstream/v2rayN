@@ -542,7 +542,7 @@ public class ProfilesViewModel : MyReactiveObject
                     //await WaitForFiveMinutes();
 
                     // 10. 循环测试最快的 10 个 Server
-                    await SetAutoSpeedTestStatus($"Step 10 of 10 : Loop test of the top {currentItemLoopCount} servers.");
+                    await SetAutoSpeedTestStatus($"Step 10 of 10 : Status is good ! Started loop testing of the top {currentItemLoopCount} servers.");
                     await DoTopTenLoopTest();
                 }
             }
@@ -977,7 +977,7 @@ public class ProfilesViewModel : MyReactiveObject
 
             for (var i = 0; IsAutoSpeedTestEnabled && i < currentItemLoopCount; i++)
             {
-                var message = $"Testing the top {currentItemLoopCount} servers... (Iteration {i + 1})";
+                var message = $"Testing the top {currentItemLoopCount} servers... Server No. {i + 1}";
                 SaveLogAndSendMessageEx(message);
 
                 var selected = ProfileItems[i];
@@ -987,7 +987,7 @@ public class ProfilesViewModel : MyReactiveObject
 
                 await ServerSpeedtest(ESpeedActionType.Speedtest);
 
-                message = $"Wait 1 minute... (Iteration {i + 1})";
+                message = $"Wait 1 minute...";
                 SaveLogAndSendMessageEx(message);
 
                 await WaitForOneMinute();

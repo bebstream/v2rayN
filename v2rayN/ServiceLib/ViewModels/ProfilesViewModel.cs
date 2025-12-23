@@ -103,6 +103,18 @@ public class ProfilesViewModel : MyReactiveObject
     // 是否有测速度在运行中
     private bool isSpeedTestRunning = false;
 
+    // 最小有效速度
+    private readonly int minValidSpeed = 5;
+
+    // 最小有效 server 数（达到有效速度的）
+    private readonly int minValidSpeedProfileCount = 5;
+
+    // 最小有效 server 数
+    private readonly int minValidProfileCount = 20;
+
+    // 最大的循环测试数，达到有效速度的 server，开启小循环测试。
+    private readonly int maxItemLoopCount;
+
     // 到下一个整点剩余时间
     private string _timeToNextHour;
     public string TimeToNextHour
@@ -531,7 +543,7 @@ public class ProfilesViewModel : MyReactiveObject
 
                     // 10. 循环测试最快的 5 个 Server
                     await SetAutoSpeedTestStatus("Step 10 of 10 : Loop test of the first five servers.");
-                    await DoLoopTestFristFive();
+                    await DoTopTenLoopTest();
                 }
             }
         }
@@ -710,11 +722,16 @@ public class ProfilesViewModel : MyReactiveObject
 
         if (ProfileItems != null && ProfileItems.Count > 0)
         {
+            // 在测速过程中，
             var selected = ProfileItems.FirstOrDefault(item => item.Delay is > 0 and < 500 && item.Speed > 1 && item.Remarks.IsNotEmpty() && (item.Remarks.ToLower().Contains("us") || item.Remarks.Contains("美国")));
-            selected ??= ProfileItems.FirstOrDefault(item => item.Delay < 500 && item.Speed > 30);
-            selected ??= ProfileItems.FirstOrDefault(item => item.Delay < 500 && item.Speed > 10);
-            selected ??= ProfileItems.FirstOrDefault(item => item.Delay < 500 && item.Speed > 5);
-            selected ??= ProfileItems.FirstOrDefault(item => item.Delay < 500 && item.Speed > 1);
+            selected ??= ProfileItems.FirstOrDefault(item => item.Delay is > 0 and < 500 && item.Speed > 30);
+            selected ??= ProfileItems.FirstOrDefault(item => item.Delay is > 0 and < 500 && item.Speed > 10);
+            selected ??= ProfileItems.FirstOrDefault(item => item.Delay is > 0 and < 500 && item.Speed > 5);
+            selected ??= ProfileItems.FirstOrDefault(item => item.Delay is > 0 and < 500 && item.Speed > 1);
+            selected ??= ProfileItems.FirstOrDefault(item => item.Speed > 30);
+            selected ??= ProfileItems.FirstOrDefault(item => item.Speed > 10);
+            selected ??= ProfileItems.FirstOrDefault(item => item.Speed > 5);
+            selected ??= ProfileItems.FirstOrDefault(item => item.Speed > 1);
 
             await DoSetServer(selected);
         }
@@ -728,8 +745,10 @@ public class ProfilesViewModel : MyReactiveObject
 
         if (ProfileItems != null && ProfileItems.Count > 0)
         {
+            // 已经按照测试速度的结果，按速度值去除无效的 server，所以 item.Speed 一定是有效的 decimal 数值。
+            // 已经按照测试速度的结果，按速度值从大到小排列，所以 ProfileItems[0] 的速度值一定是最大的，但是其 item.Delay 值可能不是在 0 到 500 区间。
             var selected = ProfileItems.FirstOrDefault(item => item.Delay is > 0 and < 500 && item.Speed > 1 && item.Remarks.IsNotEmpty() && (item.Remarks.ToLower().Contains("us") || item.Remarks.Contains("美国")));
-            selected ??= ProfileItems.FirstOrDefault(item => item.Delay < 500);
+            selected ??= ProfileItems.FirstOrDefault(item => item.Delay is > 0 and < 500 && item.Speed > 1);
             selected ??= ProfileItems[0];
 
             await DoSetServer(selected);
@@ -759,15 +778,15 @@ public class ProfilesViewModel : MyReactiveObject
     private async Task<bool> IsNeedUpdate()
     {
         // ProfileItems 总数小于 20 或者 在 ProfileItems 里统计速度大于 5 的 server 的总数 小于 5
-        if (ProfileItems.Count < 20)
+        if (ProfileItems.Count < minValidProfileCount)
         {
-            Logging.SaveLog("ProfileItems.Count < 20 , need to update subscription.");
+            Logging.SaveLog($"ProfileItems.Count < {minValidProfileCount} , need to update subscription.");
             return true;
         }
 
-        if (ProfileItems.Count(item => item.Delay is > 0 and < 500 && item.Speed > 5) < 5)
+        if (ProfileItems.Count(item => item.Delay is > 0 and < 500 && item.Speed > minValidSpeed) < minValidSpeedProfileCount)
         {
-            Logging.SaveLog("Speed value bigger than 5 ProfileItems.Count < 5 , need to update subscription.");
+            Logging.SaveLog($"Speed value bigger than {minValidSpeed} ProfileItems.Count < {minValidSpeedProfileCount} , need to update subscription.");
             return true;
         }
 
@@ -933,26 +952,27 @@ public class ProfilesViewModel : MyReactiveObject
         Logging.SaveLog("DoSortByDelay end.");
     }
 
-    private async Task DoLoopTestFristFive()
+    private async Task DoTopTenLoopTest()
     {
-        Logging.SaveLog("DoLoopTestFristFive begin...");
+        Logging.SaveLog("DoTopTenLoopTest begin...");
 
         // 循环对前 5 个服务器进行定时测速，根据测速结果，判断是否要继续循环还是再跳回到对所有 server 进行一键测试速度
-        string message;
-        var itemCount = 5;
-        itemCount = ProfileItems.Count < itemCount ? ProfileItems.Count : itemCount;
+        var itemLoopCount = ProfileItems.Count(item => item.Speed > minValidSpeed);
+        itemLoopCount = itemLoopCount > maxItemLoopCount ? maxItemLoopCount : itemLoopCount;
 
-        IList<ProfileItemModel> validProfileItems = [];
-        validProfileItems.Add(new ProfileItemModel());
-        validProfileItems.Add(new ProfileItemModel());
-
-        while (IsAutoSpeedTestEnabled && validProfileItems.Count >= 2)
+        IList <ProfileItemModel> validSpeedProfileItems = [];
+        for (var i = 0; i < minValidSpeedProfileCount; i++)
         {
-            validProfileItems.Clear();
+            validSpeedProfileItems.Add(new ProfileItemModel());
+        }
 
-            for (var i = 0; IsAutoSpeedTestEnabled && i < itemCount; i++)
+        while (IsAutoSpeedTestEnabled && validSpeedProfileItems.Count >= minValidSpeedProfileCount)
+        {
+            validSpeedProfileItems.Clear();
+
+            for (var i = 0; IsAutoSpeedTestEnabled && i < itemLoopCount; i++)
             {
-                message = $"Testing the first {itemCount} servers... (Iteration {i + 1})";
+                var message = $"Testing the top {itemLoopCount} servers... (Iteration {i + 1})";
                 SaveLogAndSendMessageEx(message);
 
                 var selected = ProfileItems[i];
@@ -975,39 +995,26 @@ public class ProfilesViewModel : MyReactiveObject
                 await Task.Delay(1000 * 10);
 
                 // 如果 server 的速度大于 5 ，则存下来。
-                if (selected.SpeedVal.IsNullOrEmpty() ||
-                    selected.SpeedVal == ResUI.SpeedtestingSkip ||
-                    selected.SpeedVal == ResUI.SpeedtestingWait ||
-                    decimal.TryParse(selected.SpeedVal, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var valueResult) == false ||
-                    valueResult < 5)
+                if (selected.Speed > minValidSpeed)
                 {
-                    continue;
-                }
-                else
-                {
-                    validProfileItems.Add(selected);
+                    validSpeedProfileItems.Add(selected);
                 }
             }
 
-            // 如果 server 数量小于 2 ，则什么也不做，等待外层循环退出。或者 如果 server 数量 大于 2 ，但是当前的活动 server 就在这个 server 列表里面，也什么都不做，等待下一次循环。
-            if (validProfileItems.Count < 2 || validProfileItems.Any(item => item.IndexId == _config.IndexId))
+            // 如果 server 数量小于 5 ，则什么也不做，等待外层循环退出。或者 如果 server 数量 大于 5 ，但是当前的活动 server 就在这个 server 列表里面，也什么都不做，等待下一次循环。
+            if (validSpeedProfileItems.Count < minValidSpeedProfileCount || validSpeedProfileItems.Any(item => item.IndexId == _config.IndexId))
             {
                 continue;
             }
-            else // 如果 Server 数量大于 2 ，但是当前的活动 server 不在这个 server 列表里面，则找到这个 server 列表里面最快速的 server，将其设置为活动 server
+            else // 如果 Server 数量大于 5 ，但是当前的活动 server 不在这个 server 列表里面，则找到这个 server 列表里面最快速的 server，将其设置为活动 server
             {
-                var biggestSpeedValueProfileItem = validProfileItems.MaxBy(item => item.SpeedVal);
+                var biggestSpeedValueProfileItem = validSpeedProfileItems.MaxBy(item => item.Speed);
 
                 await DoSetServer(biggestSpeedValueProfileItem);
             }
-
-            message = $"Wait 1 minute...";
-            SaveLogAndSendMessageEx(message);
-
-            await WaitForOneMinute();
         }
 
-        Logging.SaveLog("DoLoopTestFristFive end.");
+        Logging.SaveLog("DoTopTenLoopTest end.");
     }
 
     public async Task SetAutoSpeedTestStatus(string status)
@@ -1108,11 +1115,7 @@ public class ProfilesViewModel : MyReactiveObject
         }
         if (result.Speed.IsNotEmpty())
         {
-            if (decimal.TryParse(result.Speed, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var valueResult))
-            {
-                item.Speed = valueResult;
-            }
-            
+            item.Speed = decimal.TryParse(result.Speed, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var valueResult) ? valueResult : 0;
             item.SpeedVal = result.Speed ?? string.Empty;
         }
         await Task.CompletedTask;

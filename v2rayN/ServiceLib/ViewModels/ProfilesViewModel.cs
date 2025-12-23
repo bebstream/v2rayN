@@ -1,7 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
 using System.Reactive.Disposables.Fluent;
 
 namespace ServiceLib.ViewModels;
@@ -112,8 +109,11 @@ public class ProfilesViewModel : MyReactiveObject
     // 最小有效 server 数
     private readonly int minValidProfileCount = 20;
 
-    // 最大的循环测试数，达到有效速度的 server，开启小循环测试。
+    // 最大的小循环测试数，达到有效速度的 server，开启小循环测试。
     private readonly int maxItemLoopCount = 10;
+
+    // 保存本次小循环测试的 server 数，如果超过 10，就设置为 10
+    private int currentItemLoopCount = 0;
 
     // 到下一个整点剩余时间
     private string _timeToNextHour;
@@ -536,13 +536,13 @@ public class ProfilesViewModel : MyReactiveObject
                 else
                 {
                     // 休息等待 5 分钟
-                    message += "  Status is good, no need to update subscriptions, waiting for 5 minutes to run loop test of the first 5 servers.";
+                    message += $"  Status is good, no need to update subscriptions, waiting for 5 minutes to run loop test of the top {currentItemLoopCount} servers.";
                     SaveLogAndSendMessageEx(message);
                     await SetAutoSpeedTestStatus(message);
                     await WaitForFiveMinutes();
 
-                    // 10. 循环测试最快的 5 个 Server
-                    await SetAutoSpeedTestStatus("Step 10 of 10 : Loop test of the first five servers.");
+                    // 10. 循环测试最快的 10 个 Server
+                    await SetAutoSpeedTestStatus($"Step 10 of 10 : Loop test of the top {currentItemLoopCount} servers.");
                     await DoTopTenLoopTest();
                 }
             }
@@ -777,14 +777,21 @@ public class ProfilesViewModel : MyReactiveObject
 
     private async Task<bool> IsNeedUpdate()
     {
-        // ProfileItems 总数小于 20 或者 在 ProfileItems 里统计速度大于 5 的 server 的总数 小于 5
+        // 速度大于 5 的 server 总数
+        var validSpeedProfileCount = ProfileItems.Count(item => item.Speed > minValidSpeed);
+
+        // 保存本次小循环测试的 server 数，如果超过 10，就设置为 10
+        currentItemLoopCount = Math.Min(validSpeedProfileCount, maxItemLoopCount);
+
+        // ProfileItems 总数小于 20 
         if (ProfileItems.Count < minValidProfileCount)
         {
             Logging.SaveLog($"ProfileItems.Count < {minValidProfileCount} , need to update subscription.");
             return true;
         }
 
-        if (ProfileItems.Count(item => item.Delay is > 0 and < 500 && item.Speed > minValidSpeed) < minValidSpeedProfileCount)
+        // 在 ProfileItems 里统计速度大于 5 的 server 的总数 小于 5
+        if (validSpeedProfileCount < minValidSpeedProfileCount)
         {
             Logging.SaveLog($"Speed value bigger than {minValidSpeed} ProfileItems.Count < {minValidSpeedProfileCount} , need to update subscription.");
             return true;
@@ -957,8 +964,6 @@ public class ProfilesViewModel : MyReactiveObject
         Logging.SaveLog("DoTopTenLoopTest begin...");
 
         // 循环对前 10 个服务器进行定时测速，根据测速结果，判断是否要继续循环还是再跳回到对所有 server 进行一键测试速度
-        var itemLoopCount = ProfileItems.Count(item => item.Speed > minValidSpeed);
-        itemLoopCount = itemLoopCount > maxItemLoopCount ? maxItemLoopCount : itemLoopCount;
 
         IList <ProfileItemModel> validSpeedProfileItems = [];
         for (var i = 0; i < minValidSpeedProfileCount; i++)
@@ -970,9 +975,9 @@ public class ProfilesViewModel : MyReactiveObject
         {
             validSpeedProfileItems.Clear();
 
-            for (var i = 0; IsAutoSpeedTestEnabled && i < itemLoopCount; i++)
+            for (var i = 0; IsAutoSpeedTestEnabled && i < currentItemLoopCount; i++)
             {
-                var message = $"Testing the top {itemLoopCount} servers... (Iteration {i + 1})";
+                var message = $"Testing the top {currentItemLoopCount} servers... (Iteration {i + 1})";
                 SaveLogAndSendMessageEx(message);
 
                 var selected = ProfileItems[i];

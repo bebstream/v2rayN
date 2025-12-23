@@ -113,7 +113,7 @@ public class ProfilesViewModel : MyReactiveObject
     private readonly int minValidProfileCount = 20;
 
     // 最大的循环测试数，达到有效速度的 server，开启小循环测试。
-    private readonly int maxItemLoopCount;
+    private readonly int maxItemLoopCount = 10;
 
     // 到下一个整点剩余时间
     private string _timeToNextHour;
@@ -956,7 +956,7 @@ public class ProfilesViewModel : MyReactiveObject
     {
         Logging.SaveLog("DoTopTenLoopTest begin...");
 
-        // 循环对前 5 个服务器进行定时测速，根据测速结果，判断是否要继续循环还是再跳回到对所有 server 进行一键测试速度
+        // 循环对前 10 个服务器进行定时测速，根据测速结果，判断是否要继续循环还是再跳回到对所有 server 进行一键测试速度
         var itemLoopCount = ProfileItems.Count(item => item.Speed > minValidSpeed);
         itemLoopCount = itemLoopCount > maxItemLoopCount ? maxItemLoopCount : itemLoopCount;
 

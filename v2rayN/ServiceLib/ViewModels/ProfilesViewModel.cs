@@ -744,6 +744,7 @@ public class ProfilesViewModel : MyReactiveObject
             selected ??= ProfileItems.FirstOrDefault(item => item.Speed > 10);
             selected ??= ProfileItems.FirstOrDefault(item => item.Speed > 5);
             selected ??= ProfileItems.FirstOrDefault(item => item.Speed > 1);
+            selected ??= ProfileItems.FirstOrDefault(item => item.Speed > 0);
 
             await DoSetServer(selected);
         }

@@ -1337,7 +1337,7 @@ public static class ConfigHandler
         //remove sub items
         if (isSub && subid.IsNotEmpty())
         {
-            await RemoveServersViaSubid(config, subid, isSub);
+            //await RemoveServersViaSubid(config, subid, isSub);
             subFilter = (await AppManager.Instance.GetSubItem(subid))?.Filter ?? "";
         }
 
@@ -1441,7 +1441,7 @@ public static class ConfigHandler
         {
             if (isSub && subid.IsNotEmpty())
             {
-                await RemoveServersViaSubid(config, subid, isSub);
+                //await RemoveServersViaSubid(config, subid, isSub);
             }
             var count = 0;
             foreach (var it in lstProfiles)
@@ -1493,7 +1493,7 @@ public static class ConfigHandler
 
         if (isSub && subid.IsNotEmpty())
         {
-            await RemoveServersViaSubid(config, subid, isSub);
+            //await RemoveServersViaSubid(config, subid, isSub);
         }
 
         profileItem.Subid = subid;
@@ -1527,7 +1527,7 @@ public static class ConfigHandler
 
         if (isSub && subid.IsNotEmpty())
         {
-            await RemoveServersViaSubid(config, subid, isSub);
+            //await RemoveServersViaSubid(config, subid, isSub);
         }
 
         var lstSsServer = ShadowsocksFmt.ResolveSip008(strData);

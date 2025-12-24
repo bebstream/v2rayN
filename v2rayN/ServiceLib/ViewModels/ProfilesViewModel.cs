@@ -103,8 +103,8 @@ public class ProfilesViewModel : MyReactiveObject
     // 最小有效速度
     private readonly int minValidSpeed = 5;
 
-    // 最小有效 server 数（达到有效速度的）
-    private readonly int minValidSpeedProfileCount = 5;
+    // 最小有效 server 数（达到有效速度的 server 数量）
+    private readonly int minValidSpeedProfileCount = 3;
 
     // 最小有效 server 数
     private readonly int minValidProfileCount = 20;
@@ -473,6 +473,9 @@ public class ProfilesViewModel : MyReactiveObject
         {
             while (IsAutoSpeedTestEnabled)
             {
+                var message = "================================================================================";
+                SaveLogAndSendMessageEx(message);
+
                 var sw = Stopwatch.StartNew();
 
                 // 1. 执行一键多线程测试延迟和速度
@@ -494,12 +497,18 @@ public class ProfilesViewModel : MyReactiveObject
                 sw.Stop();
 
                 var LastTestDuration = $"{sw.Elapsed}".Substring(0, 8);
-                var message = "Last round of test duration : " + LastTestDuration;
+
+                message = "--------------------------------------------------------------------------------";
+                SaveLogAndSendMessageEx(message);
 
                 // 半路检查是否停止自动测速
                 if (IsAutoSpeedTestEnabled == false)
                 {
-                    message = "AutoSpeedTest disabled manually. Stop the current round of test now.";
+                    message = """
+                        ********************************************************************************
+                        AutoSpeedTest disabled manually. Stop the current round of test now.
+                        ********************************************************************************
+                        """;
                     SaveLogAndSendMessageEx(message);
 
                     break; // 立即退出
@@ -510,7 +519,7 @@ public class ProfilesViewModel : MyReactiveObject
 
                 if (isNeedUpdate)
                 {
-                    message += "  Status is not good, going to update all subscriptions now.";
+                    message = $"Last round of speed test duration : {LastTestDuration}  Status is not good, going to update all subscriptions now.";
                     SaveLogAndSendMessageEx(message);
 
                     // 5. 更新全部订阅（通过代理）
@@ -541,7 +550,10 @@ public class ProfilesViewModel : MyReactiveObject
                     //await SetAutoSpeedTestStatus(message);
                     //await WaitForFiveMinutes();
 
-                    // 10. 循环测试最快的 10 个 Server
+                    message = $"Last round of speed test duration : {LastTestDuration}  Status is good ! Started loop testing of the top {currentItemLoopCount} servers.";
+                    SaveLogAndSendMessageEx(message);
+
+                    // 10. 循环测试，速度最快的 10 个 Server
                     await SetAutoSpeedTestStatus($"Step 10 of 10 : Status is good ! Started loop testing of the top {currentItemLoopCount} servers.");
                     await DoTopTenLoopTest();
                 }
@@ -592,8 +604,8 @@ public class ProfilesViewModel : MyReactiveObject
 
             var newCount = ProfileItems.Count(item => item.SpeedVal == ResUI.SpeedtestingWait);
 
-            Logging.SaveLog("SpeedtestingWait count before sleep : " + oldCount);
-            Logging.SaveLog("SpeedtestingWait count  after sleep : " + newCount);
+            Logging.SaveLog($"{ResUI.SpeedtestingWait} count before sleep : " + oldCount);
+            Logging.SaveLog($"{ResUI.SpeedtestingWait} count  after sleep : " + newCount);
 
             if (newCount <= 0 || newCount == oldCount || IsAutoSpeedTestEnabled == false)
             {
@@ -786,14 +798,14 @@ public class ProfilesViewModel : MyReactiveObject
         // ProfileItems 总数小于 20 
         if (ProfileItems.Count < minValidProfileCount)
         {
-            Logging.SaveLog($"ProfileItems.Count < {minValidProfileCount} , need to update subscription.");
+            Logging.SaveLog($"All the profiles count now ProfileItems.Count = {ProfileItems.Count} < {minValidProfileCount} , need to update subscription.");
             return true;
         }
 
-        // 在 ProfileItems 里统计速度大于 5 的 server 的总数 小于 5
+        // 在 ProfileItems 里统计速度大于 5 的 server 的总数 小于 3
         if (validSpeedProfileCount < minValidSpeedProfileCount)
         {
-            Logging.SaveLog($"Speed value bigger than {minValidSpeed} ProfileItems.Count < {minValidSpeedProfileCount} , need to update subscription.");
+            Logging.SaveLog($"Speed value bigger than {minValidSpeed} ProfileItems.Count = {ProfileItems.Count} < {minValidSpeedProfileCount} , need to update subscription.");
             return true;
         }
 
@@ -835,6 +847,8 @@ public class ProfilesViewModel : MyReactiveObject
     {
         Logging.SaveLog("DoRemoveDuplication begin...");
 
+        var oldCount = ProfileItems.Count;
+
         var tuple = await ConfigHandler.DedupServerList(_config, _config.SubIndexId);
         if (tuple.Item1 > 0 || tuple.Item2 > 0)
         {
@@ -846,6 +860,11 @@ public class ProfilesViewModel : MyReactiveObject
 
         Logging.SaveLog("Wait 2 seconds...");
         await Task.Delay(1000 * 2);
+
+        var newCount = ProfileItems.Count;
+
+        Logging.SaveLog("ProfileItems.Count before removing duplication : " + oldCount);
+        Logging.SaveLog("ProfileItems.Count  after removing duplication : " + newCount);
 
         Logging.SaveLog("DoRemoveDuplication end.");
     }
@@ -877,8 +896,8 @@ public class ProfilesViewModel : MyReactiveObject
 
             var newCount = ProfileItems.Count(item => item.DelayVal == ResUI.Speedtesting);
 
-            Logging.SaveLog("Speedtesting count before sleep : " + oldCount);
-            Logging.SaveLog("Speedtesting count  after sleep : " + newCount);
+            Logging.SaveLog($"{ResUI.Speedtesting} count before sleep : " + oldCount);
+            Logging.SaveLog($"{ResUI.Speedtesting} count  after sleep : " + newCount);
 
             if (newCount <= 0 || newCount == oldCount || IsAutoSpeedTestEnabled == false)
             {
@@ -1006,16 +1025,21 @@ public class ProfilesViewModel : MyReactiveObject
                 }
             }
 
-            // 如果 server 数量小于 5 ，则什么也不做，等待外层循环退出。或者 如果 server 数量 大于 5 ，但是当前的活动 server 就在这个 server 列表里面，也什么都不做，等待下一次循环。
-            if (validSpeedProfileItems.Count < minValidSpeedProfileCount || validSpeedProfileItems.Any(item => item.IndexId == _config.IndexId))
+            if (validSpeedProfileItems.Count < minValidSpeedProfileCount)
             {
+                // 如果 server 数量小于 3 ，则什么也不做，等待外层循环退出。
                 continue;
             }
-            else // 如果 Server 数量大于 5 ，但是当前的活动 server 不在这个 server 列表里面，则找到这个 server 列表里面最快速的 server，将其设置为活动 server
+            else if (validSpeedProfileItems.Any(item => item.IndexId == _config.IndexId))
             {
-                var biggestSpeedValueProfileItem = validSpeedProfileItems.MaxBy(item => item.Speed);
-
-                await DoSetServer(biggestSpeedValueProfileItem);
+                // 或者 如果 server 数量大于 3 ，但是当前的活动 server 就在这个 server 列表里面，也什么都不做，等待下一次循环。就是，保持当前的活动 server 不改变，保持网络的稳定性。
+                continue;
+            }
+            else
+            {
+                // 如果 Server 数量大于 3 ，但是当前的活动 server 不在这个 server 列表里面，则重新对所有 server 进行按速度排序，然后重新设置活动 server。
+                await DoSortBySpeed();
+                await DoSetServerAfterSpeedTesting();
             }
         }
 

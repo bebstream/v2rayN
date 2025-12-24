@@ -607,8 +607,8 @@ public class ProfilesViewModel : MyReactiveObject
 
             var newCount = ProfileItems.Count(item => item.SpeedVal == ResUI.SpeedtestingWait);
 
-            Logging.SaveLog($"{ResUI.SpeedtestingWait} count before sleep : " + oldCount);
-            Logging.SaveLog($"{ResUI.SpeedtestingWait} count  after sleep : " + newCount);
+            Logging.SaveLog("DoSpeedTest SpeedtestingWait count before sleep : " + oldCount);
+            Logging.SaveLog("DoSpeedTest SpeedtestingWait count  after sleep : " + newCount);
 
             if (newCount <= 0 || newCount == oldCount || IsAutoSpeedTestEnabled == false)
             {
@@ -900,8 +900,8 @@ public class ProfilesViewModel : MyReactiveObject
 
             var newCount = ProfileItems.Count(item => item.DelayVal == ResUI.Speedtesting);
 
-            Logging.SaveLog($"{ResUI.Speedtesting} count before sleep : " + oldCount);
-            Logging.SaveLog($"{ResUI.Speedtesting} count  after sleep : " + newCount);
+            Logging.SaveLog("DoDelayTest Speedtesting count before sleep : " + oldCount);
+            Logging.SaveLog("DoDelayTest Speedtesting count  after sleep : " + newCount);
 
             if (newCount <= 0 || newCount == oldCount || IsAutoSpeedTestEnabled == false)
             {

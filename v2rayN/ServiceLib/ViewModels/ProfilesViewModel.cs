@@ -802,14 +802,14 @@ public class ProfilesViewModel : MyReactiveObject
         // ProfileItems 总数小于 20 
         if (ProfileItems.Count < minValidProfileCount)
         {
-            Logging.SaveLog($"All the profiles count now ProfileItems.Count = {ProfileItems.Count} < {minValidProfileCount} , need to update subscription.");
+            Logging.SaveLog($"All the profiles count now is {ProfileItems.Count} < {minValidProfileCount} , need to update subscription.");
             return true;
         }
 
         // 在 ProfileItems 里统计速度大于 5 的 server 的总数 小于 3
         if (validSpeedProfileCount < minValidSpeedProfileCount)
         {
-            Logging.SaveLog($"Speed value bigger than {minValidSpeed} ProfileItems.Count = {ProfileItems.Count} < {minValidSpeedProfileCount} , need to update subscription.");
+            Logging.SaveLog($"Speed value bigger than {minValidSpeed} profiles count is {validSpeedProfileCount} < {minValidSpeedProfileCount} , need to update subscription.");
             return true;
         }
 

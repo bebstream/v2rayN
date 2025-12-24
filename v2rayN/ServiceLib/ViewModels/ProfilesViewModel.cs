@@ -504,11 +504,14 @@ public class ProfilesViewModel : MyReactiveObject
                 // 半路检查是否停止自动测速
                 if (IsAutoSpeedTestEnabled == false)
                 {
-                    message = """
-                        ********************************************************************************
-                        AutoSpeedTest disabled manually. Stop the current round of test now.
-                        ********************************************************************************
-                        """;
+                    message = "********************************************************************************";
+                    SaveLogAndSendMessageEx(message);
+                    message = "***** AutoSpeedTest disabled manually. Stop the current round of test now. *****";
+                    SaveLogAndSendMessageEx(message);
+
+                    await SetAutoSpeedTestStatus(message);
+
+                    message = "********************************************************************************";
                     SaveLogAndSendMessageEx(message);
 
                     break; // 立即退出

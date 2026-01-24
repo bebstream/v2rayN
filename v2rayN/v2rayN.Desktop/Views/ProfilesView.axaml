@@ -107,6 +107,9 @@
                     Margin="{StaticResource MarginLr4}"
                     Classes="IconButton Success"
                     ToolTip.Tip="Trigger auto speed test now">
+                    <Button.Content>
+                        <PathIcon Data="{StaticResource building_trigger}" />
+                    </Button.Content>
                 </Button>
                 <TextBlock
                     Text="Status:"

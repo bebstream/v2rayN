@@ -106,7 +106,7 @@
                     x:Name="btnAutoSpeedTest"
                     Margin="{StaticResource MarginLr4}"
                     Classes="IconButton Success"
-                    ToolTip="Trigger auto speed test now">
+                    ToolTip.Tip="Trigger auto speed test now">
                 </Button>
                 <TextBlock
                     Text="Status:"

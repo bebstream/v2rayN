@@ -93,7 +93,31 @@
                         <PathIcon Data="{StaticResource building_ping}" />
                     </Button.Content>
                 </Button>
-
+                <TextBlock
+                    Text="Auto"
+                    VerticalAlignment="Center"
+                    Margin="{StaticResource MarginLr4}">
+                </TextBlock>
+                <ToggleSwitch
+                    x:Name="togAutoSpeedTest"
+                    Margin="{StaticResource MarginLr4}">
+                </ToggleSwitch>
+                <Button
+                    x:Name="btnAutoSpeedTest"
+                    Margin="{StaticResource MarginLr4}"
+                    Classes="IconButton Success"
+                    ToolTip="Trigger auto speed test now">
+                </Button>
+                <TextBlock
+                    Text="Status:"
+                    VerticalAlignment="Center"
+                    Margin="{StaticResource MarginLr4}">
+                </TextBlock>
+                <TextBlock
+                    x:Name="txtAutoSpeedTestStatus"
+                    VerticalAlignment="Center"
+                    Margin="{StaticResource MarginLr4}">
+                </TextBlock>
             </WrapPanel>
             <DataGrid
                 x:Name="lstProfiles"

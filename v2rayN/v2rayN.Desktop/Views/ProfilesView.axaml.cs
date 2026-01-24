@@ -77,6 +77,9 @@ public partial class ProfilesView : ReactiveUserControl<ProfilesViewModel>
             this.BindCommand(ViewModel, vm => vm.MoveBottomCmd, v => v.menuMoveBottom).DisposeWith(disposables);
 
             //servers ping
+            this.OneWayBind(ViewModel, vm => vm.AutoSpeedTestStatus, v => v.txtAutoSpeedTestStatus.Text).DisposeWith(disposables);
+            this.Bind(ViewModel, vm => vm.IsAutoSpeedTestEnabled, v => v.togAutoSpeedTest.IsChecked).DisposeWith(disposables);
+            this.BindCommand(ViewModel, vm => vm.AutoSpeedTestCmd, v => v.btnAutoSpeedTest).DisposeWith(disposables);
             this.BindCommand(ViewModel, vm => vm.MixedTestServerCmd, v => v.menuMixedTestServer).DisposeWith(disposables);
             this.BindCommand(ViewModel, vm => vm.TcpingServerCmd, v => v.menuTcpingServer).DisposeWith(disposables);
             this.BindCommand(ViewModel, vm => vm.RealPingServerCmd, v => v.menuRealPingServer).DisposeWith(disposables);

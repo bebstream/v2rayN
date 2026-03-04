@@ -259,7 +259,6 @@ public class MainWindowViewModel : MyReactiveObject
         await ConfigHandler.InitBuiltinDNS(_config);
         await ConfigHandler.InitBuiltinFullConfigTemplate(_config);
         await ProfileExManager.Instance.Init();
-        await ProfileGroupItemManager.Instance.Init();
         await CoreManager.Instance.Init(_config, UpdateHandler);
         TaskManager.Instance.RegUpdateTask(_config, UpdateTaskHandler);
 
@@ -541,20 +540,21 @@ public class MainWindowViewModel : MyReactiveObject
         {
             SetReloadEnabled(false);
 
-            var msgs = await ActionPrecheckManager.Instance.Check(_config.IndexId);
-            if (msgs.Count > 0)
+            var profileItem = await ConfigHandler.GetDefaultServer(_config);
+            if (profileItem == null)
             {
-                foreach (var msg in msgs)
-                {
-                    NoticeManager.Instance.SendMessage(msg);
-                }
-                NoticeManager.Instance.Enqueue(Utils.List2String(msgs.Take(10).ToList(), true));
+                NoticeManager.Instance.Enqueue(ResUI.CheckServerSettings);
+                return;
+            }
+            var allResult = await CoreConfigContextBuilder.BuildAll(_config, profileItem);
+            if (NoticeManager.Instance.NotifyValidatorResult(allResult.CombinedValidatorResult) && !allResult.Success)
+            {
                 return;
             }
 
             await Task.Run(async () =>
             {
-                await LoadCore();
+                await LoadCore(allResult.ResolvedMainContext, allResult.PreSocksResult?.Context);
                 await SysProxyHandler.UpdateSysProxy(_config, false);
                 await Task.Delay(1000);
             });
@@ -595,10 +595,9 @@ public class MainWindowViewModel : MyReactiveObject
         RxApp.MainThreadScheduler.Schedule(() => BlReloadEnabled = enabled);
     }
 
-    private async Task LoadCore()
+    private async Task LoadCore(CoreConfigContext? mainContext, CoreConfigContext? preContext)
     {
-        var node = await ConfigHandler.GetDefaultServer(_config);
-        await CoreManager.Instance.LoadCore(node);
+        await CoreManager.Instance.LoadCore(mainContext, preContext);
     }
 
     #endregion core job

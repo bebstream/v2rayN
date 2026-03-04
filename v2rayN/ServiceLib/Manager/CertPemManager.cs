@@ -197,6 +197,7 @@ public class CertPemManager
         "D02A0F994A868C66395F2E7A880DF509BD0C29C96DE16015A0FD501EDA4F96A9", // OISTE Client Root RSA G1
         "EEC997C0C30F216F7E3B8B307D2BAE42412D753FC8219DAFD1520B2572850F49", // OISTE Server Root ECC G1
         "9AE36232A5189FFDDB353DFD26520C015395D22777DAC59DB57B98C089A651E6", // OISTE Server Root RSA G1
+        "B49141502D00663D740F2E7EC340C52800962666121A36D09CF7DD2B90384FB4", // e-Szigno TLS Root CA 2023
     };
 
     /// <summary>
@@ -214,7 +215,7 @@ public class CertPemManager
             using var client = new TcpClient();
             await client.ConnectAsync(domain, port > 0 ? port : 443, cts.Token);
 
-            using var ssl = new SslStream(client.GetStream(), false, ValidateServerCertificate);
+            await using var ssl = new SslStream(client.GetStream(), false, ValidateServerCertificate);
 
             var sslOptions = new SslClientAuthenticationOptions
             {
@@ -261,7 +262,7 @@ public class CertPemManager
             using var client = new TcpClient();
             await client.ConnectAsync(domain, port > 0 ? port : 443, cts.Token);
 
-            using var ssl = new SslStream(client.GetStream(), false, ValidateServerCertificate);
+            await using var ssl = new SslStream(client.GetStream(), false, ValidateServerCertificate);
 
             var sslOptions = new SslClientAuthenticationOptions
             {
@@ -279,11 +280,7 @@ public class CertPemManager
             var chain = new X509Chain();
             chain.Build(certChain);
 
-            foreach (var element in chain.ChainElements)
-            {
-                var pem = ExportCertToPem(element.Certificate);
-                pemList.Add(pem);
-            }
+            pemList.AddRange(chain.ChainElements.Select(element => ExportCertToPem(element.Certificate)));
 
             return (pemList, null);
         }

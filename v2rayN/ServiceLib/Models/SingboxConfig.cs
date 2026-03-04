@@ -28,6 +28,7 @@ public class Dns4Sbox
     public bool? disable_cache { get; set; }
     public bool? disable_expire { get; set; }
     public bool? independent_cache { get; set; }
+    public int? cache_capacity { get; set; }
     public bool? reverse_mapping { get; set; }
     public string? client_subnet { get; set; }
 }
@@ -255,7 +256,7 @@ public class Server4Sbox : BaseServer4Sbox
     // public List<string>? path { get; set; } // hosts
     public Dictionary<string, List<string>>? predefined { get; set; }
 
-    // Deprecated
+    // Deprecated in sing-box 1.12.0 , kept for backward compatibility
     public string? address { get; set; }
 
     public string? address_resolver { get; set; }

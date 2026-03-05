@@ -1334,6 +1334,7 @@ public static class ConfigHandler
     public static async Task<int> RemoveInvalidServerResult(Config config, string subid)
     {
         var lstModel = await AppManager.Instance.ProfileModels(subid, "");
+        lstModel.RemoveAll(t => t.ConfigType.IsComplexType());
         if (lstModel is { Count: <= 0 })
         {
             return -1;

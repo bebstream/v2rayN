@@ -34,7 +34,7 @@ public partial class CoreConfigV2rayService
                 return;
             }
             var simpleDnsItem = context.SimpleDnsItem;
-            var dnsItem = _coreConfig.dns is Dns4Ray dns4Ray ? dns4Ray : new Dns4Ray();
+            var dnsItem = _coreConfig.dns as Dns4Ray ?? new Dns4Ray();
 
             var strategy4Freedom = simpleDnsItem?.Strategy4Freedom ?? Global.AsIs;
             //Outbound Freedom domainStrategy
@@ -121,7 +121,7 @@ public partial class CoreConfigV2rayService
         var proxyGeositeList = new List<string>();
         var expectedDomainList = new List<string>();
         var expectedIPs = new List<string>();
-        var regionNames = new HashSet<string>();
+        var regionName = string.Empty;
 
         var bootstrapDNSAddress = ParseDnsAddresses(simpleDNSItem?.BootstrapDNS, Global.DomainPureIPDNSAddress.First());
         var dnsServerDomains = new List<string>();
@@ -160,18 +160,14 @@ public partial class CoreConfigV2rayService
                 .Where(s => !string.IsNullOrEmpty(s))
                 .ToList();
 
-            foreach (var ip in expectedIPs)
+            foreach (var region in from ip in expectedIPs
+                                   where ip.StartsWith(Global.GeoIPPrefix, StringComparison.OrdinalIgnoreCase)
+                                   select ip[Global.GeoIPPrefix.Length..]
+                                   into region
+                                   where !string.IsNullOrEmpty(region)
+                                   select region)
             {
-                if (ip.StartsWith("geoip:", StringComparison.OrdinalIgnoreCase))
-                {
-                    var region = ip["geoip:".Length..];
-                    if (!string.IsNullOrEmpty(region))
-                    {
-                        regionNames.Add($"geosite:{region}");
-                        regionNames.Add($"geosite:geolocation-{region}");
-                        regionNames.Add($"geosite:tld-{region}");
-                    }
-                }
+                regionName = region;
             }
         }
 
@@ -201,9 +197,14 @@ public partial class CoreConfigV2rayService
 
                 if (item.OutboundTag == Global.DirectTag)
                 {
-                    if (normalizedDomain.StartsWith("geosite:") || normalizedDomain.StartsWith("ext:"))
+                    if (normalizedDomain.StartsWith(Global.GeoSitePrefix) || normalizedDomain.StartsWith("ext:"))
                     {
-                        (regionNames.Contains(normalizedDomain) ? expectedDomainList : directGeositeList).Add(normalizedDomain);
+                        var isExpectedDomain = !regionName.IsNullOrEmpty()
+                            && (normalizedDomain.EndsWith($"-{regionName}")
+                            || normalizedDomain.EndsWith($"@{regionName}")
+                            || normalizedDomain == Global.GeoSitePrefix + regionName);
+                        var targetList = isExpectedDomain ? expectedDomainList : directGeositeList;
+                        targetList.Add(normalizedDomain);
                     }
                     else
                     {
@@ -212,7 +213,7 @@ public partial class CoreConfigV2rayService
                 }
                 else if (item.OutboundTag != Global.BlockTag)
                 {
-                    if (normalizedDomain.StartsWith("geosite:") || normalizedDomain.StartsWith("ext:"))
+                    if (normalizedDomain.StartsWith(Global.GeoSitePrefix) || normalizedDomain.StartsWith("ext:"))
                     {
                         proxyGeositeList.Add(normalizedDomain);
                     }
@@ -245,7 +246,7 @@ public partial class CoreConfigV2rayService
 
         var useDirectDns = false;
 
-        if (rules?.LastOrDefault() is { } lastRule && lastRule.OutboundTag == Global.DirectTag)
+        if (rules?.LastOrDefault() is { OutboundTag: Global.DirectTag } lastRule)
         {
             var noDomain = lastRule.Domain == null || lastRule.Domain.Count == 0;
             var noProcess = lastRule.Process == null || lastRule.Process.Count == 0;
@@ -370,11 +371,11 @@ public partial class CoreConfigV2rayService
         try
         {
             var item = context.RawDnsItem;
-            var normalDNS = item?.NormalDNS;
+            var customDNS = context.IsTunEnabled ? item?.TunDNS : item?.NormalDNS;
             var domainStrategy4Freedom = item?.DomainStrategy4Freedom;
-            if (normalDNS.IsNullOrEmpty())
+            if (customDNS.IsNullOrEmpty())
             {
-                normalDNS = EmbedUtils.GetEmbedText(Global.DNSV2rayNormalFileName);
+                customDNS = EmbedUtils.GetEmbedText(Global.DNSV2rayNormalFileName);
             }
 
             //Outbound Freedom domainStrategy
@@ -383,17 +384,19 @@ public partial class CoreConfigV2rayService
                 var outbound = _coreConfig.outbounds.FirstOrDefault(t => t is { protocol: "freedom", tag: Global.DirectTag });
                 if (outbound != null)
                 {
-                    outbound.settings = new();
-                    outbound.settings.domainStrategy = domainStrategy4Freedom;
-                    outbound.settings.userLevel = 0;
+                    outbound.settings = new()
+                    {
+                        domainStrategy = domainStrategy4Freedom,
+                        userLevel = 0,
+                    };
                 }
             }
 
-            var obj = JsonUtils.ParseJson(normalDNS);
+            var obj = JsonUtils.ParseJson(customDNS);
             if (obj is null)
             {
                 List<string> servers = [];
-                var arrDNS = normalDNS.Split(',');
+                var arrDNS = customDNS.Split(',');
                 foreach (var str in arrDNS)
                 {
                     servers.Add(str);

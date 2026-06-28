@@ -3,6 +3,7 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:v2rayN.Desktop.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:resx="clr-namespace:ServiceLib.Resx;assembly=ServiceLib"
     xmlns:vms="clr-namespace:ServiceLib.ViewModels;assembly=ServiceLib"
@@ -341,11 +342,6 @@
                         </StackPanel>
 
                         <StackPanel Grid.Row="1" Orientation="Horizontal">
-                            <TextBlock
-                                Margin="{StaticResource Margin4}"
-                                VerticalAlignment="Center"
-                                Text="{x:Static resx:ResUI.TbSettingsRemoteDNS}" />
-
                             <TextBlock Margin="{StaticResource Margin4}" VerticalAlignment="Center">
                                 <HyperlinkButton Classes="WithIcon" Click="linkDnsObjectDoc_Click">
                                     <TextBlock Text="{x:Static resx:ResUI.TbDnsObjectDoc}" />
@@ -394,18 +390,26 @@
                         </StackPanel>
                     </WrapPanel>
 
-                    <HeaderedContentControl
-                        Margin="{StaticResource Margin4}"
-                        BorderBrush="Gray"
-                        BorderThickness="1"
-                        Header="HTTP/SOCKS">
-                        <TextBox
-                            Name="txtnormalDNSCompatible"
-                            VerticalAlignment="Stretch"
-                            Classes="TextArea"
-                            MinLines="10"
-                            TextWrapping="Wrap" />
-                    </HeaderedContentControl>
+                    <Grid Margin="{StaticResource Margin4}" ColumnDefinitions="*,10,*">
+
+                        <HeaderedContentControl
+                            Grid.Column="0"
+                            BorderBrush="Gray"
+                            BorderThickness="1"
+                            Header="HTTP/SOCKS">
+                            <local:JsonEditor Name="txtnormalDNSCompatible" VerticalAlignment="Stretch" />
+                        </HeaderedContentControl>
+
+                        <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" />
+
+                        <HeaderedContentControl
+                            Grid.Column="2"
+                            BorderBrush="Gray"
+                            BorderThickness="1"
+                            Header="{x:Static resx:ResUI.TbSettingsTunMode}">
+                            <local:JsonEditor Name="txttunDNSCompatible" VerticalAlignment="Stretch" />
+                        </HeaderedContentControl>
+                    </Grid>
                 </DockPanel>
             </TabItem>
 
@@ -473,12 +477,7 @@
                             BorderBrush="Gray"
                             BorderThickness="1"
                             Header="HTTP/SOCKS">
-                            <TextBox
-                                Name="txtnormalDNS2Compatible"
-                                VerticalAlignment="Stretch"
-                                Classes="TextArea"
-                                MinLines="10"
-                                TextWrapping="Wrap" />
+                            <local:JsonEditor Name="txtnormalDNS2Compatible" VerticalAlignment="Stretch" />
                         </HeaderedContentControl>
 
                         <GridSplitter Grid.Column="1" HorizontalAlignment="Stretch" />
@@ -488,14 +487,8 @@
                             BorderBrush="Gray"
                             BorderThickness="1"
                             Header="{x:Static resx:ResUI.TbSettingsTunMode}">
-                            <TextBox
-                                Name="txttunDNS2Compatible"
-                                VerticalAlignment="Stretch"
-                                Classes="TextArea"
-                                MinLines="10"
-                                TextWrapping="Wrap" />
+                            <local:JsonEditor Name="txttunDNS2Compatible" VerticalAlignment="Stretch" />
                         </HeaderedContentControl>
-
                     </Grid>
                 </DockPanel>
             </TabItem>

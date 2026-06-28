@@ -5,13 +5,10 @@ public class ProfilesSelectViewModel : MyReactiveObject
     #region private prop
 
     private string _serverFilter = string.Empty;
-    private Dictionary<string, bool> _dicHeaderSort = new();
+    private readonly Dictionary<string, bool> _dicHeaderSort = new();
     private string _subIndexId = string.Empty;
 
     // ConfigType filter state: default include-mode with all types selected
-    private List<EConfigType> _filterConfigTypes = new();
-
-    private bool _filterExclude = false;
 
     #endregion private prop
 
@@ -33,18 +30,11 @@ public class ProfilesSelectViewModel : MyReactiveObject
     public string ServerFilter { get; set; }
 
     // Include/Exclude filter for ConfigType
-    public List<EConfigType> FilterConfigTypes
-    {
-        get => _filterConfigTypes;
-        set => this.RaiseAndSetIfChanged(ref _filterConfigTypes, value);
-    }
+    [Reactive]
+    public List<EConfigType> FilterConfigTypes { get; set; }
 
     [Reactive]
-    public bool FilterExclude
-    {
-        get => _filterExclude;
-        set => this.RaiseAndSetIfChanged(ref _filterExclude, value);
-    }
+    public bool FilterExclude { get; set; }
 
     #endregion ObservableCollection
 
@@ -91,11 +81,11 @@ public class ProfilesSelectViewModel : MyReactiveObject
         try
         {
             FilterExclude = false;
-            FilterConfigTypes = Enum.GetValues(typeof(EConfigType)).Cast<EConfigType>().ToList();
+            FilterConfigTypes = Enum.GetValues<EConfigType>().ToList();
         }
         catch
         {
-            FilterConfigTypes = new();
+            FilterConfigTypes = [];
         }
 
         await RefreshSubscriptions();
@@ -165,37 +155,23 @@ public class ProfilesSelectViewModel : MyReactiveObject
         if (lstModel.Count > 0)
         {
             var selected = lstModel.FirstOrDefault(t => t.IndexId == _config.IndexId);
-            if (selected != null)
-            {
-                SelectedProfile = selected;
-            }
-            else
-            {
-                SelectedProfile = lstModel.First();
-            }
+            SelectedProfile = selected ?? lstModel.First();
         }
 
         await _updateView?.Invoke(EViewAction.DispatcherRefreshServersBiz, null);
     }
 
-    public async Task RefreshSubscriptions()
+    private async Task RefreshSubscriptions()
     {
+        var subItems = await AppManager.Instance.SubItems();
+        subItems.Insert(0, new SubItem { Remarks = ResUI.AllGroupServers });
+
         SubItems.Clear();
+        SubItems.AddRange(subItems);
 
-        SubItems.Add(new SubItem { Remarks = ResUI.AllGroupServers });
-
-        foreach (var item in await AppManager.Instance.SubItems())
-        {
-            SubItems.Add(item);
-        }
-        if (_subIndexId != null && SubItems.FirstOrDefault(t => t.Id == _subIndexId) != null)
-        {
-            SelectedSub = SubItems.FirstOrDefault(t => t.Id == _subIndexId);
-        }
-        else
-        {
-            SelectedSub = SubItems.First();
-        }
+        SelectedSub = (_config.SubIndexId.IsNotEmpty()
+                        ? subItems.FirstOrDefault(t => t.Id == _config.SubIndexId)
+                        : null) ?? subItems.FirstOrDefault();
     }
 
     private async Task<List<ProfileItemModel>?> GetProfileItemsEx(string subid, string filter)
@@ -218,7 +194,7 @@ public class ProfilesSelectViewModel : MyReactiveObject
                     }).OrderBy(t => t.Sort).ToList();
 
         // Apply ConfigType filter (include or exclude)
-        if (FilterConfigTypes != null && FilterConfigTypes.Count > 0)
+        if (FilterConfigTypes is { Count: > 0 })
         {
             if (FilterExclude)
             {
@@ -326,7 +302,7 @@ public class ProfilesSelectViewModel : MyReactiveObject
     // External setter for ConfigType filter
     public void SetConfigTypeFilter(IEnumerable<EConfigType> types, bool exclude = false)
     {
-        FilterConfigTypes = types?.Distinct().ToList() ?? new List<EConfigType>();
+        FilterConfigTypes = types?.Distinct().ToList() ?? [];
         FilterExclude = exclude;
     }
 

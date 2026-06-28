@@ -57,7 +57,7 @@ public class RoutingRuleDetailsViewModel : MyReactiveObject
     {
         Domain = Utils.Convert2Comma(Domain);
         IP = Utils.Convert2Comma(IP);
-        Process = Utils.Convert2Comma(Process);
+        Process = Utils.ParseProcess(Process);
 
         if (AutoSort)
         {
@@ -73,7 +73,7 @@ public class RoutingRuleDetailsViewModel : MyReactiveObject
         }
         SelectedSource.Protocol = ProtocolItems?.ToList();
         SelectedSource.InboundTag = InboundTagItems?.ToList();
-        SelectedSource.RuleType = RuleType.IsNullOrEmpty() ? null : (ERuleType)Enum.Parse(typeof(ERuleType), RuleType);
+        SelectedSource.RuleType = RuleType.IsNullOrEmpty() ? null : Enum.Parse<ERuleType>(RuleType);
 
         var hasRule = SelectedSource.Domain?.Count > 0
           || SelectedSource.Ip?.Count > 0

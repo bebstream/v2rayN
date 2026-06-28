@@ -343,7 +343,7 @@
     <value>*QUIC kulcs/KCP seed</value>
   </data>
   <data name="TransportPathTip4" xml:space="preserve">
-    <value>*grpc szolgáltatásnév</value>
+    <value>gRPC szolgáltatásnév</value>
   </data>
   <data name="TransportRequestHostTip1" xml:space="preserve">
     <value>*http host vesszővel elválasztva (,)</value>
@@ -357,17 +357,17 @@
   <data name="TransportRequestHostTip4" xml:space="preserve">
     <value>*QUIC biztonság</value>
   </data>
-  <data name="TransportHeaderTypeTip1" xml:space="preserve">
-    <value>*tcp álcázási típus</value>
+  <data name="TransportHeaderType1" xml:space="preserve">
+    <value>raw álcázási típus</value>
   </data>
-  <data name="TransportHeaderTypeTip2" xml:space="preserve">
-    <value>*kcp álcázási típus</value>
+  <data name="TransportHeaderType2" xml:space="preserve">
+    <value>kcp álcázási típus</value>
   </data>
-  <data name="TransportHeaderTypeTip3" xml:space="preserve">
-    <value>*QUIC álcázási típus</value>
+  <data name="TransportHeaderType3" xml:space="preserve">
+    <value>QUIC álcázási típus</value>
   </data>
-  <data name="TransportHeaderTypeTip4" xml:space="preserve">
-    <value>*grpc mód</value>
+  <data name="TransportHeaderType4" xml:space="preserve">
+    <value>gRPC mód</value>
   </data>
   <data name="LvTLS" xml:space="preserve">
     <value>TLS</value>
@@ -606,9 +606,6 @@
   <data name="TbRemarks" xml:space="preserve">
     <value>Alias (megjegyzések)</value>
   </data>
-  <data name="TbRequestHost" xml:space="preserve">
-    <value>Álcázási tartomány(host)</value>
-  </data>
   <data name="TbSecurity" xml:space="preserve">
     <value>Titkosítási módszer (biztonság)</value>
   </data>
@@ -619,7 +616,7 @@
     <value>TLS</value>
   </data>
   <data name="TipNetwork" xml:space="preserve">
-    <value>*Alapértelmezett érték tcp</value>
+    <value>*Alapértelmezett érték raw</value>
   </data>
   <data name="TbCoreType" xml:space="preserve">
     <value>Core Típus</value>
@@ -722,9 +719,6 @@
   </data>
   <data name="TbSettingsPass" xml:space="preserve">
     <value>Hitelesítési jelszó</value>
-  </data>
-  <data name="TbSettingsRemoteDNS" xml:space="preserve">
-    <value>Egyéni DNS (több, vesszővel (,) elválasztva)</value>
   </data>
   <data name="TbSettingsSetUWP" xml:space="preserve">
     <value>Win10 UWP Loopback beállítása</value>
@@ -937,7 +931,7 @@
     <value>User-Agent</value>
   </data>
   <data name="TbSettingsDefUserAgentTips" xml:space="preserve">
-    <value>Ez a paraméter csak tcp/http és ws esetén érvényes</value>
+    <value>This parameter is valid only for raw/http, ws, gRPC and xhttp</value>
   </data>
   <data name="TbSettingsCurrentFontFamily" xml:space="preserve">
     <value>Betűtípus (újraindítást igényel)</value>
@@ -1027,7 +1021,7 @@
     <value>sing-box Mux protokoll</value>
   </data>
   <data name="TbRoutingRuleProcess" xml:space="preserve">
-    <value>Process (Tun mode)</value>
+    <value>Process (Linux/Windows)</value>
   </data>
   <data name="TbRoutingRuleIP" xml:space="preserve">
     <value>IP vagy IP CIDR</value>
@@ -1068,7 +1062,7 @@
   <data name="TbSettingsTunStack" xml:space="preserve">
     <value>Hálózati verem</value>
   </data>
-  <data name="TbSettingsTunMtu" xml:space="preserve">
+  <data name="TbMtu" xml:space="preserve">
     <value>MTU</value>
   </data>
   <data name="TbSettingsEnableIPv6Address" xml:space="preserve">
@@ -1081,7 +1075,7 @@
     <value>Privát kulcs</value>
   </data>
   <data name="TbReserved" xml:space="preserve">
-    <value>Fenntartott (2,3,4)</value>
+    <value>Fenntartott</value>
   </data>
   <data name="TbLocalAddress" xml:space="preserve">
     <value>Cím (IPv4, IPv6)</value>
@@ -1098,20 +1092,50 @@
   <data name="TbSettingsSpeedPingTestUrl" xml:space="preserve">
     <value>Sebesség Ping Teszt URL</value>
   </data>
-  <data name="TbSettingsEnableUpdateSubOnlyRemarksExist" xml:space="preserve">
-    <value>Előfizetés frissítése, csak a megjegyzések létezésének ellenőrzése</value>
-  </data>
   <data name="SpeedtestingStop" xml:space="preserve">
     <value>Teszt megszakítása...</value>
   </data>
   <data name="TransportRequestHostTip5" xml:space="preserve">
-    <value>*grpc Authority</value>
+    <value>gRPC Authority</value>
   </data>
   <data name="menuAddHttpServer" xml:space="preserve">
     <value>HTTP konfiguráció hozzáadása</value>
   </data>
   <data name="TbSettingsEnableFragment" xml:space="preserve">
     <value>Fragment engedélyezése</value>
+  </data>
+  <data name="TbSettingsFragmentPackets" xml:space="preserve">
+    <value>Fragmentált csomagok</value>
+  </data>
+  <data name="TbSettingsFragmentPacketsTip" xml:space="preserve">
+    <value>Fragmentálandó csomagok: tlshello (TLS ClientHello) vagy 1-1 – 1-5 (az első N TCP csomag)</value>
+  </data>
+  <data name="TbSettingsFragmentLength" xml:space="preserve">
+    <value>Fragment hossz</value>
+  </data>
+  <data name="TbSettingsFragmentLengthTip" xml:space="preserve">
+    <value>Fragment méret tartománya bájtokban (pl. 50-100). Az első érték ≤ második. Üres = alapértelmezett.</value>
+  </data>
+  <data name="TbSettingsFragmentInterval" xml:space="preserve">
+    <value>Fragment intervallum</value>
+  </data>
+  <data name="TbSettingsFragmentIntervalTip" xml:space="preserve">
+    <value>Késleltetés a fragmented csomagok között ms-ben (pl. 10-20). Tartomány 1-100. Az első érték ≤ második. Üres = alapértelmezett.</value>
+  </data>
+  <data name="TbSettingsFragmentMaxSplit" xml:space="preserve">
+    <value>Max darabolás</value>
+  </data>
+  <data name="TbSettingsFragmentMaxSplitTip" xml:space="preserve">
+    <value>Maximális darabolások száma (0 = korlátlan, 0-10000). Csak Xray-core. Üres = alapértelmezett.</value>
+  </data>
+  <data name="TbSettingsFragmentFallbackDelay" xml:space="preserve">
+    <value>Fallback késleltetés</value>
+  </data>
+  <data name="TbSettingsFragmentFallbackDelayTip" xml:space="preserve">
+    <value>TLS fragment fallback késleltetés. Csak sing-box. Üres = alapértelmezett.</value>
+  </data>
+  <data name="FillFragmentParameterError" xml:space="preserve">
+    <value>Érvénytelen tartomány formátum. Használja 'from-to' (pl. 50-100).</value>
   </data>
   <data name="TbSettingsEnableCacheFile4Sbox" xml:space="preserve">
     <value>Gyorsítótár fájl engedélyezése sing-boxhoz (szabálykészlet fájlok)</value>
@@ -1323,11 +1347,11 @@
   <data name="TbSettingsLinuxSudoPasswordTip" xml:space="preserve">
     <value>A jelszót a parancssoron keresztül ellenőrizzük. Ha egy érvényesítési hiba miatt az alkalmazás hibásan működik, indítsa újra az alkalmazást. A jelszó nem kerül tárolásra, és minden újraindítás után újra meg kell adni.</value>
   </data>
-  <data name="TransportHeaderTypeTip5" xml:space="preserve">
-    <value>*xhttp mód</value>
+  <data name="TransportHeaderType5" xml:space="preserve">
+    <value>xhttp mód</value>
   </data>
   <data name="TransportExtraTip" xml:space="preserve">
-    <value>XHTTP Extra nyers JSON, formátum: { XHTTP Objektum }</value>
+    <value>Raw JSON, format: { XHTTP Object }</value>
   </data>
   <data name="TbSettingsHide2TrayWhenClose" xml:space="preserve">
     <value>Ablak bezárásakor a tálcára rejtés</value>
@@ -1590,9 +1614,6 @@ The "Get Certificate" action may fail if a self-signed certificate is used or if
   <data name="TbEchConfigList" xml:space="preserve">
     <value>EchConfigList</value>
   </data>
-  <data name="TbEchForceQuery" xml:space="preserve">
-    <value>EchForceQuery</value>
-  </data>
   <data name="TbFullCertTips" xml:space="preserve">
     <value>Full certificate (chain), PEM format</value>
   </data>
@@ -1670,5 +1691,83 @@ The "Get Certificate" action may fail if a self-signed certificate is used or if
   </data>
   <data name="menuGenRegionGroup" xml:space="preserve">
     <value>Group by Region</value>
+  </data>
+  <data name="menuEditCopy" xml:space="preserve">
+    <value>Másolás</value>
+  </data>
+  <data name="menuEditSelectAll" xml:space="preserve">
+    <value>Összes kijelölése</value>
+  </data>
+  <data name="menuEditPaste" xml:space="preserve">
+    <value>Paste</value>
+  </data>
+  <data name="menuEditFormat" xml:space="preserve">
+    <value>Format</value>
+  </data>
+  <data name="TbUot" xml:space="preserve">
+    <value>UDP over TCP</value>
+  </data>
+  <data name="menuAddNaiveServer" xml:space="preserve">
+    <value>[NaïveProxy] konfiguráció hozzáadása</value>
+  </data>
+  <data name="TbInsecureConcurrency" xml:space="preserve">
+    <value>Insecure Concurrency</value>
+  </data>
+  <data name="TbUsername" xml:space="preserve">
+    <value>Username</value>
+  </data>
+  <data name="TbIcmpRoutingPolicy" xml:space="preserve">
+    <value>ICMP routing policy</value>
+  </data>
+  <data name="TbLegacyProtect" xml:space="preserve">
+    <value>Legacy TUN Protect</value>
+  </data>
+  <data name="TbCamouflageDomain" xml:space="preserve">
+    <value>Álcázási tartomány</value>
+  </data>
+  <data name="TbHost" xml:space="preserve">
+    <value>Host</value>
+  </data>
+  <data name="TransportExtra" xml:space="preserve">
+    <value>XHTTP Extra</value>
+  </data>
+  <data name="menuUdpTestServer" xml:space="preserve">
+    <value>Test Configurations UDP Delay</value>
+  </data>
+  <data name="TbSettingsUdpTestUrl" xml:space="preserve">
+    <value>UDP Test Url</value>
+  </data>
+  <data name="TbSettingsSendThrough" xml:space="preserve">
+    <value>Local outbound address (SendThrough)</value>
+  </data>
+  <data name="TbSettingsSendThroughTip" xml:space="preserve">
+    <value>For multi-interface environments, enter the local machine's IPv4 address</value>
+  </data>
+  <data name="TbSettingsBindInterface" xml:space="preserve">
+    <value>Bind Interface</value>
+  </data>
+  <data name="TbSettingsBindInterfaceTip" xml:space="preserve">
+    <value>For multi-interface environments, enter the name of the interface to bind. Only effective on Windows systems or TUN mode</value>
+  </data>
+  <data name="TbPreSharedKey" xml:space="preserve">
+    <value>PreSharedKey</value>
+  </data>
+  <data name="menuExport2InnerUri" xml:space="preserve">
+    <value>Export v2rayN Internal Share Link to Clipboard</value>
+  </data>
+  <data name="MsgCheckUpdateHasNewVersion" xml:space="preserve">
+    <value>{0} has a new version available: {1}</value>
+  </data>
+  <data name="menuCheckOnly" xml:space="preserve">
+    <value>Only Check</value>
+  </data>
+  <data name="MsgNotSupport" xml:space="preserve">
+    <value>Not Support</value>
+  </data>
+  <data name="LvTestIpInfo" xml:space="preserve">
+    <value>IP Info</value>
+  </data>
+  <data name="menuNewUpdate" xml:space="preserve">
+    <value>New Update</value>
   </data>
 </root>

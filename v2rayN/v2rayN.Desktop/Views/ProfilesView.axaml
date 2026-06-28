@@ -167,6 +167,7 @@
                             x:Name="menuSpeedServer"
                             Header="{x:Static resx:ResUI.menuSpeedServer}"
                             InputGesture="Ctrl+T" />
+                        <MenuItem x:Name="menuUdpTestServer" Header="{x:Static resx:ResUI.menuUdpTestServer}" />
                         <MenuItem x:Name="menuSortServerResult" Header="{x:Static resx:ResUI.menuSortServerResult}" />
                         <Separator />
                         <MenuItem
@@ -218,6 +219,7 @@
                                 Header="{x:Static resx:ResUI.menuExport2ShareUrl}"
                                 InputGesture="Ctrl+C" />
                             <MenuItem x:Name="menuExport2ShareUrlBase64" Header="{x:Static resx:ResUI.menuExport2ShareUrlBase64}" />
+                            <MenuItem x:Name="menuExport2InnerUri" Header="{x:Static resx:ResUI.menuExport2InnerUri}" />
                         </MenuItem>
                         <Separator />
                         <MenuItem Header="{x:Static resx:ResUI.menuGenGroupServer}">
@@ -301,6 +303,20 @@
                         Binding="{Binding SpeedVal}"
                         Header="{x:Static resx:ResUI.LvTestSpeed}"
                         Tag="SpeedVal" />
+
+                    <DataGridTemplateColumn SortMemberPath="IpInfo" Tag="IpInfo">
+                        <DataGridTemplateColumn.Header>
+                            <TextBlock Text="{x:Static resx:ResUI.LvTestIpInfo}" />
+                        </DataGridTemplateColumn.Header>
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <SelectableTextBlock
+                                    Margin="{StaticResource MarginLr8}"
+                                    VerticalAlignment="Center"
+                                    Text="{Binding Path=IpInfo, Mode=OneWay}" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
 
                     <DataGridTextColumn
                         Width="100"

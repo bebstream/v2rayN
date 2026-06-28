@@ -8,15 +8,15 @@ public partial class CoreConfigSingboxService
         {
             var listen = "0.0.0.0";
             var listenPort = AppManager.Instance.GetLocalPort(EInboundProtocol.socks);
+            var isUsingLocalMixedPort = _node.Address == Global.Loopback && _node.Port == listenPort;
             _coreConfig.inbounds = [];
 
-            if (!context.IsTunEnabled
-                || (context.IsTunEnabled && _node.Port != listenPort))
+            if (!context.IsTunEnabled || !isUsingLocalMixedPort)
             {
                 var inbound = new Inbound4Sbox()
                 {
-                    type = EInboundProtocol.mixed.ToString(),
-                    tag = EInboundProtocol.socks.ToString(),
+                    type = nameof(EInboundProtocol.mixed),
+                    tag = nameof(EInboundProtocol.socks),
                     listen = Global.Loopback,
                 };
                 _coreConfig.inbounds.Add(inbound);
@@ -62,7 +62,7 @@ public partial class CoreConfigSingboxService
                 }
 
                 var tunInbound = JsonUtils.Deserialize<Inbound4Sbox>(EmbedUtils.GetEmbedText(Global.TunSingboxInboundFileName)) ?? new Inbound4Sbox { };
-                tunInbound.interface_name = Utils.IsMacOS() ? $"utun{new Random().Next(99)}" : "singbox_tun";
+                tunInbound.interface_name = context.IsMacOS ? $"utun{new Random().Next(99)}" : "singbox_tun";
                 tunInbound.mtu = _config.TunModeItem.Mtu;
                 tunInbound.auto_route = _config.TunModeItem.AutoRoute;
                 tunInbound.strict_route = _config.TunModeItem.StrictRoute;
@@ -71,6 +71,7 @@ public partial class CoreConfigSingboxService
                 {
                     tunInbound.address = ["172.18.0.1/30"];
                 }
+                tunInbound.route_exclude_address = _config.TunModeItem.RouteExcludeAddress;
 
                 _coreConfig.inbounds.Add(tunInbound);
             }
@@ -86,7 +87,7 @@ public partial class CoreConfigSingboxService
         var inbound = JsonUtils.DeepCopy(inItem);
         inbound.tag = protocol.ToString();
         inbound.listen_port = inItem.listen_port + (int)protocol;
-        inbound.type = EInboundProtocol.mixed.ToString();
+        inbound.type = nameof(EInboundProtocol.mixed);
         return inbound;
     }
 }

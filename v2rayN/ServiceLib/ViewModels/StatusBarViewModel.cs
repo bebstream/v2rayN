@@ -200,27 +200,27 @@ public class StatusBarViewModel : MyReactiveObject
 
         AppEvents.DispatcherStatisticsRequested
             .AsObservable()
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(async result => await UpdateStatistics(result));
 
         AppEvents.RoutingsMenuRefreshRequested
             .AsObservable()
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(async _ => await RefreshRoutingsMenu());
 
         AppEvents.TestServerRequested
             .AsObservable()
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(async _ => await TestServerAvailability());
 
         AppEvents.InboundDisplayRequested
             .AsObservable()
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(async _ => await InboundDisplayStatus());
 
         AppEvents.SysProxyChangeRequested
             .AsObservable()
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(async result => await SetListenerType(result));
 
         #endregion AppEvents
@@ -234,6 +234,8 @@ public class StatusBarViewModel : MyReactiveObject
         await RefreshRoutingsMenu();
         await InboundDisplayStatus();
         await ChangeSystemProxyAsync(_config.SystemProxyItem.SysProxyType, true);
+
+        BlRouting = true;
     }
 
     public void InitUpdateView(Func<EViewAction, object?, Task<bool>>? updateView)
@@ -243,7 +245,7 @@ public class StatusBarViewModel : MyReactiveObject
         {
             AppEvents.ProfilesRefreshRequested
               .AsObservable()
-              .ObserveOn(RxApp.MainThreadScheduler)
+              .ObserveOn(RxSchedulers.MainThreadScheduler)
               .Subscribe(async _ => await RefreshServersBiz()); //.DisposeWith(_disposables);
         }
     }
@@ -312,19 +314,20 @@ public class StatusBarViewModel : MyReactiveObject
             return;
         }
 
+        var models = new List<ComboItem>();
         BlServers = true;
-        for (var k = 0; k < lstModel.Count; k++)
+        foreach (var it in lstModel)
         {
-            var it = lstModel[k];
             var name = it.GetSummary();
 
             var item = new ComboItem() { ID = it.IndexId, Text = name };
-            Servers.Add(item);
+            models.Add(item);
             if (_config.IndexId == it.IndexId)
             {
                 SelectedServer = item;
             }
         }
+        Servers.AddRange(models);
     }
 
     private void ServerSelectedChanged(bool c)
@@ -362,7 +365,7 @@ public class StatusBarViewModel : MyReactiveObject
 
     private async Task TestServerAvailabilitySub(string msg)
     {
-        RxApp.MainThreadScheduler.Schedule(msg, (scheduler, msg) =>
+        RxSchedulers.MainThreadScheduler.Schedule(msg, (scheduler, msg) =>
         {
             _ = TestServerAvailabilityResult(msg);
             return Disposable.Empty;
@@ -409,18 +412,12 @@ public class StatusBarViewModel : MyReactiveObject
 
     private async Task RefreshRoutingsMenu()
     {
-        RoutingItems.Clear();
-
-        BlRouting = true;
         var routings = await AppManager.Instance.RoutingItems();
-        foreach (var item in routings)
-        {
-            RoutingItems.Add(item);
-            if (item.IsActive)
-            {
-                SelectedRouting = item;
-            }
-        }
+
+        RoutingItems.Clear();
+        RoutingItems.AddRange(routings);
+
+        SelectedRouting = routings.FirstOrDefault(t => t.IsActive == true);
     }
 
     private async Task RoutingSelectedChangedAsync(bool c)
@@ -490,6 +487,7 @@ public class StatusBarViewModel : MyReactiveObject
                 }
             }
         }
+
         await ConfigHandler.SaveConfig(_config);
         AppEvents.ReloadRequested.Publish();
     }

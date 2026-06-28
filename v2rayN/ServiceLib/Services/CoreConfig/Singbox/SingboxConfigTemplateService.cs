@@ -23,7 +23,7 @@ public partial class CoreConfigSingboxService
         }
 
         // Process outbounds
-        var customOutboundsNode = fullConfigTemplateNode["outbounds"] is JsonArray outbounds ? outbounds : [];
+        var customOutboundsNode = fullConfigTemplateNode["outbounds"] as JsonArray ?? [];
         foreach (var outbound in _coreConfig.outbounds)
         {
             if (outbound.type.ToLower() is "direct" or "block")
@@ -42,9 +42,9 @@ public partial class CoreConfigSingboxService
         fullConfigTemplateNode["outbounds"] = customOutboundsNode;
 
         // Process endpoints
-        if (_coreConfig.endpoints != null && _coreConfig.endpoints.Count > 0)
+        if (_coreConfig.endpoints is { Count: > 0 })
         {
-            var customEndpointsNode = fullConfigTemplateNode["endpoints"] is JsonArray endpoints ? endpoints : [];
+            var customEndpointsNode = fullConfigTemplateNode["endpoints"] as JsonArray ?? [];
             foreach (var endpoint in _coreConfig.endpoints)
             {
                 if (endpoint.detour.IsNullOrEmpty() && !fullConfigTemplate.ProxyDetour.IsNullOrEmpty())
@@ -57,5 +57,54 @@ public partial class CoreConfigSingboxService
         }
 
         return JsonUtils.Serialize(fullConfigTemplateNode);
+    }
+
+    private void ApplyOutboundBindInterface()
+    {
+        var bindInterface = _config.CoreBasicItem.BindInterface?.TrimEx();
+        if (bindInterface.IsNullOrEmpty())
+        {
+            return;
+        }
+        foreach (var outbound in _coreConfig.outbounds ?? [])
+        {
+            outbound.bind_interface = ShouldBindNet(outbound) ? bindInterface : null;
+        }
+    }
+
+    private void ApplyOutboundSendThrough()
+    {
+        var sendThrough = _config.CoreBasicItem.SendThrough?.TrimEx();
+        if (sendThrough.IsNullOrEmpty())
+        {
+            return;
+        }
+
+        foreach (var outbound in _coreConfig.outbounds ?? [])
+        {
+            outbound.inet4_bind_address = ShouldBindNet(outbound) ? sendThrough : null;
+        }
+    }
+
+    private static bool ShouldBindNet(Outbound4Sbox outbound)
+    {
+        if (outbound.type is "direct" or "block" or "dns" or "selector" or "urltest")
+        {
+            return false;
+        }
+
+        if (!outbound.detour.IsNullOrEmpty())
+        {
+            return false;
+        }
+
+        var outboundAddress = outbound.server ?? string.Empty;
+
+        if (outboundAddress.Equals("localhost", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return !IPAddress.TryParse(outboundAddress, out var address) || !IPAddress.IsLoopback(address);
     }
 }

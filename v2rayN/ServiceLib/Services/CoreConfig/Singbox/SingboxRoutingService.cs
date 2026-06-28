@@ -24,7 +24,7 @@ public partial class CoreConfigSingboxService
                 strategy = directDnsStrategy
             };
 
-            if (_config.TunModeItem.EnableTun)
+            if (context.IsTunEnabled)
             {
                 _coreConfig.route.auto_detect_interface = true;
 
@@ -47,6 +47,36 @@ public partial class CoreConfigSingboxService
                     outbound = Global.DirectTag,
                     process_name = lstDirectExe
                 });
+
+                // ICMP Routing
+                var icmpRouting = _config.TunModeItem.IcmpRouting ?? "";
+                if (!Global.TunIcmpRoutingPolicies.Contains(icmpRouting))
+                {
+                    icmpRouting = Global.TunIcmpRoutingPolicies.First();
+                }
+                if (icmpRouting == "direct")
+                {
+                    _coreConfig.route.rules.Add(new()
+                    {
+                        network = ["icmp"],
+                        outbound = Global.DirectTag,
+                    });
+                }
+                else if (icmpRouting != "rule")
+                {
+                    var rejectMethod = icmpRouting switch
+                    {
+                        "unreachable" => "default",
+                        "drop" => "drop",
+                        _ => "reply",
+                    };
+                    _coreConfig.route.rules.Add(new()
+                    {
+                        network = ["icmp"],
+                        action = "reject",
+                        method = rejectMethod,
+                    });
+                }
             }
 
             if (_config.Inbound.First().SniffingEnabled)
@@ -57,18 +87,40 @@ public partial class CoreConfigSingboxService
                 });
                 _coreConfig.route.rules.Add(new()
                 {
-                    protocol = ["dns"],
-                    action = "hijack-dns"
+                    type = "logical",
+                    mode = "or",
+                    action = "hijack-dns",
+                    rules =
+                    [
+                        new() { port = [53] },
+                        new() { protocol = ["dns"] },
+                    ],
                 });
+                if (_config.CoreBasicItem.EnableFinalFragment)
+                {
+                    _coreConfig.route.rules.Add(new()
+                    {
+                        protocol = ["tls"],
+                        action = "route-options",
+                        tls_record_fragment = true,
+                    });
+                }
             }
             else
             {
                 _coreConfig.route.rules.Add(new()
                 {
                     port = [53],
-                    network = ["udp"],
-                    action = "hijack-dns"
+                    action = "hijack-dns",
                 });
+                if (_config.CoreBasicItem.EnableFinalFragment)
+                {
+                    _coreConfig.route.rules.Add(new()
+                    {
+                        action = "route-options",
+                        tls_record_fragment = true,
+                    });
+                }
             }
 
             var hostsDomains = new List<string>();
@@ -141,12 +193,12 @@ public partial class CoreConfigSingboxService
             _coreConfig.route.rules.Add(new()
             {
                 outbound = Global.DirectTag,
-                clash_mode = ERuleMode.Direct.ToString()
+                clash_mode = nameof(ERuleMode.Direct)
             });
             _coreConfig.route.rules.Add(new()
             {
                 outbound = Global.ProxyTag,
-                clash_mode = ERuleMode.Global.ToString()
+                clash_mode = nameof(ERuleMode.Global)
             });
 
             var domainStrategy = _config.RoutingBasicItem.DomainStrategy4Singbox.NullIfEmpty();
@@ -300,11 +352,52 @@ public partial class CoreConfigSingboxService
             if (item.Ip?.Count > 0)
             {
                 var countIp = 0;
-                foreach (var it in item.Ip)
+                var negativeIpList = item.Ip.Where(it => it.StartsWith('!')).ToList();
+                if (negativeIpList.Count > 0)
                 {
-                    if (ParseV2Address(it, rule2))
+                    var positiveIpList = item.Ip.Except(negativeIpList).ToList();
+                    var positiveRule = rule2;
+                    positiveRule = JsonUtils.DeepCopy(rule2);
+                    positiveRule.outbound = null;
+                    positiveRule.action = null;
+                    foreach (var it in positiveIpList)
                     {
-                        countIp++;
+                        if (ParseV2Address(it, positiveRule))
+                        {
+                            countIp++;
+                        }
+                    }
+                    var negativeRule = new Rule4Sbox();
+                    foreach (var it in negativeIpList)
+                    {
+                        // Remove first '!' and trim spaces
+                        var ip = it[1..].Trim();
+                        if (ParseV2Address(ip, negativeRule))
+                        {
+                            countIp++;
+                        }
+                    }
+                    negativeRule.invert = true;
+                    rule2 = new Rule4Sbox()
+                    {
+                        outbound = rule2.outbound,
+                        action = rule2.action,
+                        type = "logical",
+                        mode = "or",
+                        rules = [
+                            positiveRule,
+                            negativeRule
+                        ]
+                    };
+                }
+                else
+                {
+                    foreach (var it in item.Ip)
+                    {
+                        if (ParseV2Address(it, rule2))
+                        {
+                            countIp++;
+                        }
                     }
                 }
                 if (countIp > 0)
@@ -377,10 +470,10 @@ public partial class CoreConfigSingboxService
         {
             return false;
         }
-        else if (domain.StartsWith("geosite:"))
+        else if (domain.StartsWith(Global.GeoSitePrefix))
         {
             rule.geosite ??= [];
-            rule.geosite?.Add(domain.Substring(8));
+            rule.geosite?.Add(domain[Global.GeoSitePrefix.Length..]);
         }
         else if (domain.StartsWith("regexp:"))
         {
@@ -421,28 +514,18 @@ public partial class CoreConfigSingboxService
         {
             return false;
         }
-        else if (address.Equals("geoip:private"))
+        else if (address.Equals($"{Global.GeoIPPrefix}private"))
         {
             rule.ip_is_private = true;
         }
-        else if (address.StartsWith("geoip:"))
+        else if (address.StartsWith(Global.GeoIPPrefix))
         {
-            rule.geoip ??= new();
-            rule.geoip?.Add(address.Substring(6));
-        }
-        else if (address.Equals("geoip:!private"))
-        {
-            rule.ip_is_private = false;
-        }
-        else if (address.StartsWith("geoip:!"))
-        {
-            rule.geoip ??= new();
-            rule.geoip?.Add(address.Substring(6));
-            rule.invert = true;
+            rule.geoip ??= [];
+            rule.geoip?.Add(address[Global.GeoIPPrefix.Length..]);
         }
         else
         {
-            rule.ip_cidr ??= new();
+            rule.ip_cidr ??= [];
             rule.ip_cidr?.Add(address);
         }
         return true;
@@ -464,7 +547,7 @@ public partial class CoreConfigSingboxService
             return Global.ProxyTag;
         }
 
-        var tag = $"{node.IndexId}-{Global.ProxyTag}";
+        var tag = $"{node.IndexId}-{Global.ProxyTag}-{node.Remarks}";
         if (_coreConfig.outbounds.Any(o => o.tag.StartsWith(tag))
             || (_coreConfig.endpoints != null && _coreConfig.endpoints.Any(e => e.tag.StartsWith(tag))))
         {

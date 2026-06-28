@@ -56,7 +56,7 @@ public partial class CoreConfigV2rayService
             }
             else
             {
-                _coreConfig.burstObservatory.subjectSelector ??= new();
+                _coreConfig.burstObservatory.subjectSelector ??= [];
                 _coreConfig.burstObservatory.subjectSelector.Add(baseTagName);
             }
         }
@@ -75,7 +75,7 @@ public partial class CoreConfigV2rayService
             }
             else
             {
-                _coreConfig.observatory.subjectSelector ??= new();
+                _coreConfig.observatory.subjectSelector ??= [];
                 _coreConfig.observatory.subjectSelector.Add(baseTagName);
             }
         }
@@ -104,8 +104,9 @@ public partial class CoreConfigV2rayService
                 },
             },
             tag = balancerTag,
+            fallbackTag = multipleLoad == EMultipleLoad.Fallback ? Global.DirectTag : null,
         };
-        _coreConfig.routing.balancers ??= new();
+        _coreConfig.routing.balancers ??= [];
         _coreConfig.routing.balancers.Add(balancer);
     }
 }

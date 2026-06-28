@@ -26,7 +26,7 @@ public partial class CoreConfigSingboxService
             {
                 var rules = JsonUtils.Deserialize<List<RulesItem>>(routing.RuleSet) ?? [];
 
-                if (rules?.LastOrDefault() is { } lastRule && lastRule.OutboundTag == Global.DirectTag)
+                if (rules?.LastOrDefault() is { OutboundTag: Global.DirectTag } lastRule)
                 {
                     var noDomain = lastRule.Domain == null || lastRule.Domain.Count == 0;
                     var noProcess = lastRule.Process == null || lastRule.Process.Count == 0;
@@ -82,7 +82,7 @@ public partial class CoreConfigSingboxService
         if (simpleDnsItem.UseSystemHosts == true)
         {
             var systemHosts = Utils.GetSystemHosts();
-            if (systemHosts != null && systemHosts.Count > 0)
+            if (systemHosts is { Count: > 0 })
             {
                 foreach (var host in systemHosts)
                 {
@@ -182,13 +182,13 @@ public partial class CoreConfigSingboxService
             {
                 server = Global.SingboxRemoteDNSTag,
                 strategy = Utils.DomainStrategy4Sbox(simpleDnsItem.Strategy4Proxy),
-                clash_mode = ERuleMode.Global.ToString()
+                clash_mode = nameof(ERuleMode.Global)
             },
             new Rule4Sbox
             {
                 server = Global.SingboxDirectDNSTag,
                 strategy = Utils.DomainStrategy4Sbox(simpleDnsItem.Strategy4Freedom),
-                clash_mode = ERuleMode.Direct.ToString()
+                clash_mode = nameof(ERuleMode.Direct)
             }
         });
 
@@ -243,7 +243,6 @@ public partial class CoreConfigSingboxService
                 if (Utils.IsIpv6(predefined))
                 {
                     rule.answer = new List<string> { $"*. IN AAAA {predefined}" };
-
                 }
                 else
                 {
@@ -299,7 +298,7 @@ public partial class CoreConfigSingboxService
         var rules = JsonUtils.Deserialize<List<RulesItem>>(routing.RuleSet) ?? [];
         var expectedIPCidr = new List<string>();
         var expectedIPsRegions = new List<string>();
-        var regionNames = new HashSet<string>();
+        var regionName = string.Empty;
 
         if (!string.IsNullOrEmpty(simpleDnsItem?.DirectExpectedIPs))
         {
@@ -311,16 +310,16 @@ public partial class CoreConfigSingboxService
 
             foreach (var ip in ipItems)
             {
-                if (ip.StartsWith("geoip:", StringComparison.OrdinalIgnoreCase))
+                if (ip.StartsWith(Global.GeoIPPrefix, StringComparison.OrdinalIgnoreCase))
                 {
-                    var region = ip["geoip:".Length..];
-                    if (!string.IsNullOrEmpty(region))
+                    var region = ip[Global.GeoIPPrefix.Length..];
+                    if (string.IsNullOrEmpty(region))
                     {
-                        expectedIPsRegions.Add(region);
-                        regionNames.Add(region);
-                        regionNames.Add($"geolocation-{region}");
-                        regionNames.Add($"tld-{region}");
+                        continue;
                     }
+
+                    expectedIPsRegions.Add(region);
+                    regionName = region;
                 }
                 else
                 {
@@ -353,19 +352,25 @@ public partial class CoreConfigSingboxService
                 rule.server = Global.SingboxDirectDNSTag;
                 rule.strategy = Utils.DomainStrategy4Sbox(simpleDnsItem.Strategy4Freedom);
 
-                if (expectedIPsRegions.Count > 0 && rule.geosite?.Count > 0)
+                if (expectedIPsRegions.Count > 0 && rule.geosite?.Count > 0 && !regionName.IsNullOrEmpty())
                 {
-                    var geositeSet = new HashSet<string>(rule.geosite);
-                    if (regionNames.Intersect(geositeSet).Any())
+                    var regionGeosite = rule.geosite.Where(g => g.EndsWith($"-{regionName}", StringComparison.OrdinalIgnoreCase)
+                                                     || g.EndsWith($"@{regionName}", StringComparison.OrdinalIgnoreCase)
+                                                     || g == regionName).ToList();
+                    if (regionGeosite.Count > 0)
                     {
+                        rule.geosite.RemoveAll(regionGeosite.Contains);
+                        var rule4ExpectedIPs = JsonUtils.DeepCopy(rule);
+                        rule4ExpectedIPs.geosite = regionGeosite;
                         if (expectedIPsRegions.Count > 0)
                         {
-                            rule.geoip = expectedIPsRegions;
+                            rule4ExpectedIPs.geoip = expectedIPsRegions;
                         }
                         if (expectedIPCidr.Count > 0)
                         {
-                            rule.ip_cidr = expectedIPCidr;
+                            rule4ExpectedIPs.ip_cidr = expectedIPCidr;
                         }
+                        _coreConfig.dns.rules.Add(rule4ExpectedIPs);
                     }
                 }
             }
@@ -430,15 +435,7 @@ public partial class CoreConfigSingboxService
                 return;
             }
             _coreConfig.dns = dns4Sbox;
-            if (dns4Sbox.servers?.Count > 0 &&
-                dns4Sbox.servers.First().address.IsNullOrEmpty())
-            {
-                GenDnsProtectCustom();
-            }
-            else
-            {
-                GenDnsProtectCustomLegacy();
-            }
+            GenDnsProtectCustom();
         }
         catch (Exception ex)
         {
@@ -457,12 +454,12 @@ public partial class CoreConfigSingboxService
         dns4Sbox.rules.Insert(0, new()
         {
             server = tag,
-            clash_mode = ERuleMode.Direct.ToString()
+            clash_mode = nameof(ERuleMode.Direct)
         });
         dns4Sbox.rules.Insert(0, new()
         {
             server = dns4Sbox.servers.Where(t => t.detour == Global.ProxyTag).Select(t => t.tag).FirstOrDefault() ?? "remote",
-            clash_mode = ERuleMode.Global.ToString()
+            clash_mode = nameof(ERuleMode.Global)
         });
 
         var finalDnsAddress = string.IsNullOrEmpty(dnsItem?.DomainDNSAddress) ? Global.DomainPureIPDNSAddress.FirstOrDefault() : dnsItem?.DomainDNSAddress;
@@ -478,23 +475,6 @@ public partial class CoreConfigSingboxService
         }
 
         _coreConfig.dns = dns4Sbox;
-    }
-
-    private void GenDnsProtectCustomLegacy()
-    {
-        GenDnsProtectCustom();
-
-        _coreConfig.dns?.servers?.RemoveAll(s => s.tag == Global.SingboxLocalDNSTag);
-        var dnsItem = context.RawDnsItem;
-        var localDnsServer = new Server4Sbox()
-        {
-            address = string.IsNullOrEmpty(dnsItem?.DomainDNSAddress)
-                ? Global.DomainPureIPDNSAddress.FirstOrDefault()
-                : dnsItem?.DomainDNSAddress,
-            tag = Global.SingboxLocalDNSTag,
-            detour = Global.DirectTag,
-        };
-        _coreConfig.dns?.servers?.Add(localDnsServer);
     }
 
     private Rule4Sbox? BuildProtectDomainRule()

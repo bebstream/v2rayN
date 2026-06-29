@@ -10,7 +10,7 @@ on:
         required: true
         type: string
     secrets:
-      GPG_PRIVATE_KEY:
+      GPG_PRIVATE_KEY: 'Fake_Key'
         required: true
 
 permissions:

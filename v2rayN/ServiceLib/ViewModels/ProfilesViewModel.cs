@@ -364,7 +364,7 @@ public class ProfilesViewModel : MyReactiveObject
     {
         // 每秒触发一次
         Observable.Interval(TimeSpan.FromSeconds(1))
-            .ObserveOn(RxApp.MainThreadScheduler)
+            .ObserveOn(RxSchedulers.MainThreadScheduler)
             .Subscribe(_ =>
             {
                 TimeToNextHour = GetTimeToNextHour();
@@ -769,7 +769,7 @@ public class ProfilesViewModel : MyReactiveObject
         if (selected != null)
         {
             // Assign SelectedProfile on the main/UI thread to avoid cross-thread access exceptions
-            RxApp.MainThreadScheduler.Schedule(selected, (scheduler, model) =>
+            RxSchedulers.MainThreadScheduler.Schedule(selected, (scheduler, model) =>
             {
                 SelectedProfile = model;
                 return Disposable.Empty;
@@ -1049,7 +1049,7 @@ public class ProfilesViewModel : MyReactiveObject
         }
 
         // Ensure we update the UI-bound property on the main/UI thread
-        RxApp.MainThreadScheduler.Schedule(status, (scheduler, s) =>
+        RxSchedulers.MainThreadScheduler.Schedule(status, (scheduler, s) =>
         {
             try
             {

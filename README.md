@@ -23,6 +23,13 @@ Download the latest release here:
 
 [https://github.com/2dust/v2rayN/releases](https://github.com/2dust/v2rayN/releases)
 
+
+> [!TIP]
+> v2rayN is the desktop version. For the mobile version, please visit the v2rayNG \
+> v2rayN 是电脑版，手机版请访问 v2rayNG
+>
+> https://github.com/2dust/v2rayNG
+
 ---
 
 ## Documentation / 使用文档
@@ -42,6 +49,8 @@ Read the Wiki for usage guides and configuration details.
 | Windows | ✅ | ✅ | ✅ | - | - |
 | Linux | ✅ | - | ✅ | ✅ | ✅ |
 | macOS | ✅ | - | ✅ | - | - |
+
+Minimum OS requirements: [Release files introduction](https://github.com/2dust/v2rayN/wiki/Release-files-introduction) / 最低系统要求：[发布文件介绍](https://github.com/2dust/v2rayN/wiki/Release-files-introduction)
 
 ---
 

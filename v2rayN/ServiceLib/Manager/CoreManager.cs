@@ -8,8 +8,10 @@ public class CoreManager
     private static readonly Lazy<CoreManager> _instance = new(() => new());
     public static CoreManager Instance => _instance.Value;
     private Config _config;
+
     [SupportedOSPlatform("windows")]
     private WindowsJobService? _processJob;
+
     private ProcessService? _processService;
     private ProcessService? _processPreService;
     private bool _linuxSudo = false;
@@ -83,7 +85,7 @@ public class CoreManager
         await CoreStop();
         await Task.Delay(100);
 
-        if (Utils.IsWindows() && _config.TunModeItem.EnableTun)
+        if (Utils.IsWindows() && (mainContext?.IsTunEnabled == true || preContext?.IsTunEnabled == true))
         {
             await Task.Delay(100);
             await WindowsUtils.RemoveTunDevice();
@@ -181,7 +183,7 @@ public class CoreManager
         var coreInfo = CoreInfoManager.Instance.GetCoreInfo(coreType);
 
         var displayLog = node.ConfigType != EConfigType.Custom || node.DisplayLog;
-        var proc = await RunProcess(coreInfo, Global.CoreConfigFileName, displayLog, true);
+        var proc = await RunProcess(coreInfo, Global.CoreConfigFileName, displayLog, true, context.IsTunEnabled);
         if (proc is null)
         {
             return;
@@ -199,7 +201,7 @@ public class CoreManager
             if (result.Success)
             {
                 var coreInfo = CoreInfoManager.Instance.GetCoreInfo(preCoreType);
-                var proc = await RunProcess(coreInfo, Global.CorePreConfigFileName, true, true);
+                var proc = await RunProcess(coreInfo, Global.CorePreConfigFileName, true, true, preContext.IsTunEnabled);
                 if (proc is null)
                 {
                     return;
@@ -220,7 +222,7 @@ public class CoreManager
         {
             return;
         }
-        if (!preContext.AppConfig.TunModeItem.EnableTun)
+        if (!preContext.IsTunEnabled)
         {
             return;
         }
@@ -287,7 +289,20 @@ public class CoreManager
 
     #region Process
 
-    private async Task<ProcessService?> RunProcess(CoreInfo? coreInfo, string configPath, bool displayLog, bool mayNeedSudo)
+    /// <summary>
+    ///     Decides whether a core launch must be elevated on non-Windows platforms.
+    ///     The TUN state comes from the immutable <see cref="CoreConfigContext" /> snapshot that
+    ///     generated the config, never from the live mutable config: the generated config and the
+    ///     launch mode must always agree, even if TUN is toggled while a reload is in flight.
+    /// </summary>
+    public static bool ShouldRunAsSudo(bool isTunLaunch, ECoreType? coreType, bool isNonWindows)
+    {
+        return isTunLaunch
+            && coreType is ECoreType.sing_box or ECoreType.mihomo or ECoreType.Xray
+            && isNonWindows;
+    }
+
+    private async Task<ProcessService?> RunProcess(CoreInfo? coreInfo, string configPath, bool displayLog, bool mayNeedSudo, bool isTunLaunch = false)
     {
         var fileName = CoreInfoManager.Instance.GetCoreExecFile(coreInfo, out var msg);
         if (fileName.IsNullOrEmpty())
@@ -299,9 +314,7 @@ public class CoreManager
         try
         {
             if (mayNeedSudo
-                && _config.TunModeItem.EnableTun
-                && (coreInfo.CoreType is ECoreType.sing_box or ECoreType.mihomo or ECoreType.Xray)
-                && Utils.IsNonWindows())
+                && ShouldRunAsSudo(isTunLaunch, coreInfo.CoreType, Utils.IsNonWindows()))
             {
                 _linuxSudo = true;
                 await CoreAdminManager.Instance.Init(_config, _updateFunc);

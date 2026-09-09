@@ -1179,7 +1179,9 @@ public static class ConfigHandler
                 continue;
             }
 
-            if (lstKeep.Exists(i => CompareProfileItem(i, item, false)))
+            // 修改去重逻辑，只判断地址、端口和传输协议这三项
+            // if (lstKeep.Exists(i => CompareProfileItem(i, item, false)))
+            if (!lstKeep.Exists(i => i.Address.Equals(item.Address) && i.Port == item.Port && i.Network.Equals(item.Network)))
             {
                 lstRemove.Add(item);
             }

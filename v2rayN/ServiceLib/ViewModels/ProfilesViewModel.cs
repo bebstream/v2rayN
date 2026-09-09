@@ -720,12 +720,18 @@ public partial class ProfilesViewModel : MyReactiveObject
         if (ProfileItems != null && ProfileItems.Count > 0)
         {
             // 在测速过程中，
-            var selected = ProfileItems.FirstOrDefault(item => item.Delay is > 0 and < 500 && item.Speed > 1 && item.Remarks.IsNotEmpty() && (item.Remarks.ToLower().Contains("us") || item.Remarks.Contains("美国")));
+            // var selected = ProfileItems.FirstOrDefault(item => item.Delay is > 0 and < 500 && item.Speed > 1 && item.Remarks.IsNotEmpty() && (item.Remarks.ToLower().Contains("us") || item.Remarks.Contains("美国")));
+            var selected = ProfileItems.FirstOrDefault(item => item.Delay is > 0 and < 500 && item.Speed > 50);
+            selected ??= ProfileItems.FirstOrDefault(item => item.Delay is > 0 and < 500 && item.Speed > 40);
             selected ??= ProfileItems.FirstOrDefault(item => item.Delay is > 0 and < 500 && item.Speed > 30);
+            selected ??= ProfileItems.FirstOrDefault(item => item.Delay is > 0 and < 500 && item.Speed > 20);
             selected ??= ProfileItems.FirstOrDefault(item => item.Delay is > 0 and < 500 && item.Speed > 10);
             selected ??= ProfileItems.FirstOrDefault(item => item.Delay is > 0 and < 500 && item.Speed > 5);
             selected ??= ProfileItems.FirstOrDefault(item => item.Delay is > 0 and < 500 && item.Speed > 1);
+            selected ??= ProfileItems.FirstOrDefault(item => item.Speed > 50);
+            selected ??= ProfileItems.FirstOrDefault(item => item.Speed > 40);
             selected ??= ProfileItems.FirstOrDefault(item => item.Speed > 30);
+            selected ??= ProfileItems.FirstOrDefault(item => item.Speed > 20);
             selected ??= ProfileItems.FirstOrDefault(item => item.Speed > 10);
             selected ??= ProfileItems.FirstOrDefault(item => item.Speed > 5);
             selected ??= ProfileItems.FirstOrDefault(item => item.Speed > 1);
@@ -745,8 +751,8 @@ public partial class ProfilesViewModel : MyReactiveObject
         {
             // 已经按照测试速度的结果，按速度值去除无效的 server，所以 item.Speed 一定是有效的 decimal 数值。
             // 已经按照测试速度的结果，按速度值从大到小排列，所以 ProfileItems[0] 的速度值一定是最大的，但是其 item.Delay 值可能不是在 0 到 500 区间。
-            var selected = ProfileItems.FirstOrDefault(item => item.Delay is > 0 and < 500 && item.Speed > 1 && item.Remarks.IsNotEmpty() && (item.Remarks.ToLower().Contains("us") || item.Remarks.Contains("美国")));
-            selected ??= ProfileItems.FirstOrDefault(item => item.Delay is > 0 and < 500 && item.Speed > 1);
+            // var selected = ProfileItems.FirstOrDefault(item => item.Delay is > 0 and < 500 && item.Speed > 1 && item.Remarks.IsNotEmpty() && (item.Remarks.ToLower().Contains("us") || item.Remarks.Contains("美国")));
+            var selected = ProfileItems.FirstOrDefault(item => item.Delay is > 0 and < 500 && item.Speed > 1);
             selected ??= ProfileItems[0];
 
             await DoSetServer(selected);

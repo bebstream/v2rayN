@@ -4,6 +4,7 @@ public class V2rayConfig
 {
     public Log4Ray log { get; set; }
     public object dns { get; set; }
+    public FakeDns4Ray? fakedns { get; set; }
     public List<Inbounds4Ray> inbounds { get; set; }
     public List<Outbounds4Ray> outbounds { get; set; }
     public Routing4Ray routing { get; set; }
@@ -41,6 +42,12 @@ public class Log4Ray
     public string? error { get; set; }
 
     public string? loglevel { get; set; }
+}
+
+public class FakeDns4Ray
+{
+    public string? ipPool { get; set; }
+    public long? poolSize { get; set; }
 }
 
 public class Inbounds4Ray
@@ -136,8 +143,6 @@ public class Outboundsettings4Ray
 
     public Response4Ray? response { get; set; }
 
-    public string? domainStrategy { get; set; }
-
     public int? userLevel { get; set; }
 
     public string? secretKey { get; set; }
@@ -145,6 +150,16 @@ public class Outboundsettings4Ray
     public object? address { get; set; }
 
     public int? port { get; set; }
+
+    public string? user { get; set; }
+
+    public string? pass { get; set; }
+
+    public int? level { get; set; }
+
+    public string? email { get; set; }
+
+    public object? headers { get; set; }
 
     public List<WireguardPeer4Ray>? peers { get; set; }
 
@@ -157,6 +172,8 @@ public class Outboundsettings4Ray
     public int? workers { get; set; }
 
     public int? version { get; set; }
+
+    public List<string>? remoteDNS { get; set; }
 }
 
 public class WireguardPeer4Ray
@@ -226,6 +243,7 @@ public class Dns4Ray
     public List<object> servers { get; set; }
     public bool? serveStale { get; set; }
     public bool? enableParallelQuery { get; set; }
+    public string? queryStrategy { get; set; }
     public string? tag { get; set; }
 }
 
@@ -276,7 +294,6 @@ public class BalancersItem4Ray
     public List<string>? selector { get; set; }
     public BalancersStrategy4Ray? strategy { get; set; }
     public string? tag { get; set; }
-    public string? fallbackTag { get; set; }
 }
 
 public class BalancersStrategy4Ray
@@ -289,16 +306,7 @@ public class BalancersStrategySettings4Ray
 {
     public int? expected { get; set; }
     public string? maxRTT { get; set; }
-    public float? tolerance { get; set; }
-    public List<string>? baselines { get; set; }
-    public List<BalancersStrategySettingsCosts4Ray>? costs { get; set; }
-}
-
-public class BalancersStrategySettingsCosts4Ray
-{
-    public bool? regexp { get; set; }
-    public string? match { get; set; }
-    public float? value { get; set; }
+    public double? tolerance { get; set; }
 }
 
 public class Observatory4Ray
@@ -359,8 +367,6 @@ public class StreamSettings4Ray
 
 public class TlsSettings4Ray
 {
-    public bool? allowInsecure { get; set; }
-
     public string? serverName { get; set; }
 
     public List<string>? alpn { get; set; }
@@ -516,6 +522,8 @@ public class MaskSettings4Ray
 
     public string? length { get; set; }
     public string? delay { get; set; }
+    public List<string>? lengths { get; set; }
+    public List<string>? delays { get; set; }
     public int? maxSplit { get; set; }
 
     // noise
@@ -547,15 +555,20 @@ public class AccountsItem4Ray
 
 public class Sockopt4Ray
 {
+    public string? domainStrategy { get; set; }
+
     public string? dialerProxy { get; set; }
 
     [JsonPropertyName("interface")]
     public string? Interface { get; set; }
+
+    public HappyEyeballs4Ray? happyEyeballs { get; set; }
 }
 
-public class FragmentItem4Ray
+public class HappyEyeballs4Ray
 {
-    public string? packets { get; set; }
-    public string? length { get; set; }
-    public string? interval { get; set; }
+    public int? tryDelayMs { get; set; }
+    public bool? prioritizeIPv6 { get; set; }
+    public int? interleave { get; set; }
+    public int? maxConcurrentTry { get; set; }
 }

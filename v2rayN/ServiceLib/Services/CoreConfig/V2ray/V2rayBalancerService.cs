@@ -89,6 +89,7 @@ public partial class CoreConfigV2rayService
             EMultipleLoad.RoundRobin => "roundRobin",
             EMultipleLoad.LeastPing => "leastPing",
             EMultipleLoad.LeastLoad => "leastLoad",
+            EMultipleLoad.Fallback => "leastLoad",
             _ => "roundRobin",
         };
         var balancerTag = $"{selector}{Global.BalancerTagSuffix}";
@@ -98,13 +99,16 @@ public partial class CoreConfigV2rayService
             strategy = new()
             {
                 type = strategyType,
-                settings = new()
-                {
-                    expected = 1,
-                },
+                settings = strategyType == "leastLoad"
+                    ? new()
+                    {
+                        expected = 1,
+                        tolerance = multipleLoad == EMultipleLoad.Fallback ? 0.2 : null,
+                        maxRTT = multipleLoad == EMultipleLoad.Fallback ? "5000ms" : null,
+                    }
+                    : null,
             },
             tag = balancerTag,
-            fallbackTag = multipleLoad == EMultipleLoad.Fallback ? Global.DirectTag : null,
         };
         _coreConfig.routing.balancers ??= [];
         _coreConfig.routing.balancers.Add(balancer);

@@ -5,14 +5,14 @@ public static class ConnectionHandler
     private static readonly string _tag = "ConnectionHandler";
 
     /// <summary>
-    /// Runs ping and IP checks and returns a formatted result string.
+    /// Runs ping and IP checks.
     /// </summary>
-    public static async Task<string> RunAvailabilityCheck()
+    public static async Task<AvailabilityCheckResult> RunAvailabilityCheck()
     {
         var time = await GetRealPingTimeInfo();
         var ip = time > 0 ? await GetIPInfo() : Global.None;
 
-        return string.Format(ResUI.TestMeOutput, time, ip);
+        return new AvailabilityCheckResult(time, ip);
     }
 
     /// <summary>
@@ -38,7 +38,7 @@ public static class ConnectionHandler
 
             for (var i = 0; i < 2; i++)
             {
-                responseTime = await GetRealPingTime(webProxy, 10);
+                responseTime = await GetRealPingTime(webProxy);
                 if (responseTime > 0)
                 {
                     break;
@@ -66,7 +66,7 @@ public static class ConnectionHandler
     /// <summary>
     /// Measures response time by sending HTTP requests through proxy.
     /// </summary>
-    public static async Task<int> GetRealPingTime(IWebProxy? webProxy, int downloadTimeout)
+    public static async Task<int> GetRealPingTime(IWebProxy? webProxy, int downloadTimeout = 9)
     {
         var url = AppManager.Instance.Config.SpeedTestItem.SpeedPingTestUrl;
         var responseTime = -1;
@@ -77,7 +77,8 @@ public static class ConnectionHandler
             using var client = new HttpClient(new SocketsHttpHandler()
             {
                 Proxy = webProxy,
-                UseProxy = webProxy != null
+                UseProxy = webProxy != null,
+                ConnectTimeout = TimeSpan.FromSeconds(3)
             });
 
             List<int> oneTime = [];

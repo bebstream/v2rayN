@@ -5,6 +5,9 @@ public record ProtocolExtraItem
     public bool? Uot { get; init; }
     public string? CongestionControl { get; init; }
 
+    // http outbound
+    public string? HttpHeaders { get; init; }
+
     // vmess
     public string? AlterId { get; init; }
     public string? VmessSecurity { get; init; }
@@ -24,6 +27,7 @@ public record ProtocolExtraItem
     public string? WgInterfaceAddress { get; init; }
     public string? WgReserved { get; init; }
     public int? WgMtu { get; init; }
+    public string? WgDns { get; init; }
 
     // hysteria2
     public string? SalamanderPass { get; init; }
@@ -48,4 +52,7 @@ public record ProtocolExtraItem
     public string? SubChildItems { get; init; }
     public string? Filter { get; init; }
     public EMultipleLoad? MultipleLoad { get; init; }
+
+    // custom outbound
+    public bool? IsSingboxEndpoint { get; init; }
 }
